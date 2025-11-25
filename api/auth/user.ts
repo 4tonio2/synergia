@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleCorsOptions } from '../_helpers';
 import { createClient } from '@supabase/supabase-js';
+import { neon } from '@neondatabase/serverless';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -32,10 +33,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    res.status(200).json({ user });
+    // Fetch user data from database
+    const databaseUrl = process.env.DATABASE_URL;
+    if (databaseUrl) {
+      try {
+        const sql = neon(databaseUrl);
+        const userData = await sql`
+          SELECT * FROM "User" WHERE id = ${user.id}
+        `;
+
+        if (userData.length > 0) {
+          return res.status(200).json(userData[0]);
+        }
+      } catch (dbError) {
+        console.error('[AUTH] Database error:', dbError);
+        // Continue with basic user data if DB fails
+      }
+    }
+
+    // Fallback to basic Supabase user data
+    res.status(200).json({
+      id: user.id,
+      email: user.email,
+      firstName: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+      lastName: user.user_metadata?.last_name || '',
+      medicalRole: null,
+    });
 
   } catch (error: any) {
     console.error('[AUTH] Get user error:', error);
     res.status(500).json({ error: error.message });
   }
 }
+
