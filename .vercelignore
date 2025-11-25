@@ -1,0 +1,8 @@
+node_modules
+.git
+.env
+.env.local
+server
+*.md
+!VERCEL_DEPLOYMENT.md
+attached_assets
