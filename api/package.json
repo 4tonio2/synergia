@@ -1,3 +1,7 @@
 {
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "@types/busboy": "^1.5.4",
+    "busboy": "^1.6.0"
+  }
 }

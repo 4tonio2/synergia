@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getOpenAIClient, handleCorsOptions } from '../_helpers';
-import { File } from 'buffer';
+import Busboy from 'busboy';
+import { Readable } from 'stream';
 
 export const config = {
   api: {
@@ -18,21 +19,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const openai = getOpenAIClient();
 
-    // Get the raw body buffer
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) {
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-    }
-    const buffer = Buffer.concat(chunks);
+    // Parse multipart/form-data with busboy
+    const audioBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const busboy = Busboy({ headers: req.headers });
+      let fileBuffer: Buffer | null = null;
 
-    if (!buffer || buffer.length === 0) {
+      busboy.on('file', (fieldname, file, info) => {
+        const chunks: Buffer[] = [];
+        
+        file.on('data', (chunk) => {
+          chunks.push(chunk);
+        });
+
+        file.on('end', () => {
+          fileBuffer = Buffer.concat(chunks);
+        });
+      });
+
+      busboy.on('finish', () => {
+        if (!fileBuffer) {
+          reject(new Error('No file uploaded'));
+        } else {
+          resolve(fileBuffer);
+        }
+      });
+
+      busboy.on('error', (error) => {
+        reject(error);
+      });
+
+      // Convert Vercel request to stream and pipe to busboy
+      if (req.body) {
+        const stream = Readable.from(Buffer.from(req.body as any));
+        stream.pipe(busboy);
+      } else {
+        (req as any).pipe(busboy);
+      }
+    });
+
+    if (!audioBuffer || audioBuffer.length === 0) {
       return res.status(400).json({ error: 'No audio data provided' });
     }
 
-    console.log('[WHISPER] Transcribing audio, size:', buffer.length);
+    console.log('[WHISPER] Transcribing audio, size:', audioBuffer.length);
 
     // Create a File object from buffer for OpenAI
-    const audioFile = new File([buffer], 'audio.webm', { type: 'audio/webm' });
+    const audioFile = new File([audioBuffer], 'audio.webm', { type: 'audio/webm' });
 
     // Call OpenAI Whisper API with optimized parameters
     const transcription = await openai.audio.transcriptions.create({
