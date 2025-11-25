@@ -85,26 +85,6 @@ export default function E09_VisitDetail() {
           )}
         </div>
         
-        {/* Player Audio TTS de la transcription */}
-        {visit.iaData?.audioOriginal && (
-          <div className="mb-6 p-4 bg-white rounded-xl shadow-md border-l-4 border-blue-500">
-            <h3 className="text-lg font-bold mb-3 flex items-center text-blue-700">
-              <Volume2 size={20} className="mr-2" />
-              Lecture de la Transcription
-            </h3>
-            <audio 
-              controls 
-              className="w-full"
-              src={`data:audio/mpeg;base64,${visit.iaData.audioOriginal}`}
-            >
-              Votre navigateur ne supporte pas la lecture audio.
-            </audio>
-            <p className="text-xs text-gray-500 mt-2">
-              Synthèse vocale des notes de visite
-            </p>
-          </div>
-        )}
-        
         {/* Transcription */}
         {visit.iaData?.transcription && (
           <div className="mb-6 p-4 bg-gray-50 rounded-xl shadow-md border-l-4 border-gray-300">

@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getOpenAIClient, handleCorsOptions } from '../_helpers';
-import formidable from 'formidable';
-import fs from 'fs';
+import { File } from 'buffer';
 
 export const config = {
   api: {
@@ -19,31 +18,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const openai = getOpenAIClient();
 
-    // Parse form data with formidable
-    const form = formidable({});
-    const [fields, files] = await form.parse(req);
+    // Get the raw body buffer
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+    const buffer = Buffer.concat(chunks);
 
-    const audioFile = files.audio?.[0];
-    if (!audioFile) {
-      return res.status(400).json({ error: 'No audio file provided' });
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: 'No audio data provided' });
     }
 
-    console.log('[WHISPER] Transcribing audio file:', {
-      originalName: audioFile.originalFilename,
-      size: audioFile.size,
-      mimetype: audioFile.mimetype
-    });
+    console.log('[WHISPER] Transcribing audio, size:', buffer.length);
 
-    // Read file from temporary location
-    const fileStream = fs.createReadStream(audioFile.filepath);
+    // Create a File object from buffer for OpenAI
+    const audioFile = new File([buffer], 'audio.webm', { type: 'audio/webm' });
 
     // Call OpenAI Whisper API with optimized parameters
     const transcription = await openai.audio.transcriptions.create({
-      file: fileStream,
+      file: audioFile,
       model: 'whisper-1',
-      language: 'fr', // Force French language
-      response_format: 'verbose_json', // Get more metadata for quality
-      temperature: 0.0, // Lower temperature = more deterministic, less hallucinations
+      language: 'fr',
+      response_format: 'verbose_json',
+      temperature: 0.0,
       prompt: 'Contexte médical professionnel. Visite à domicile par infirmier ou infirmière. Notes de soins : observations cliniques, constantes vitales (tension, température, saturation, pouls), état du patient, soins réalisés (pansement, injection, prélèvement), traitement médicamenteux, plaie, douleur, glycémie, suivi post-opératoire. Termes médicaux français.'
     });
 
@@ -64,9 +61,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     console.log('[WHISPER] Transcription successful:', cleanedText);
-
-    // Clean up temp file
-    fs.unlinkSync(audioFile.filepath);
 
     res.status(200).json({ text: cleanedText });
 
