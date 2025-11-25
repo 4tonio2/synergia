@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build:vercel",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "outputDirectory": "dist/public",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 30
+    }
+  }
+}
