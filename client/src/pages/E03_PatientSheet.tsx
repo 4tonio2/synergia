@@ -61,7 +61,7 @@ export default function E03_PatientSheet() {
   };
 
   const handleOrderMaterial = () => {
-    toast.info('Fonctionnalité SHOP à venir - Commande de matériel pour ' + patient.name);
+    setLocation('/shop');
   };
 
   return (
