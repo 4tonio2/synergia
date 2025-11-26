@@ -21,6 +21,8 @@ import E14_IASettings from "@/pages/E14_IASettings";
 import E15_AlertsConsole from "@/pages/E15_AlertsConsole";
 import E16_OfflineMode from "@/pages/E16_OfflineMode";
 import E17_InterPatientSynthesis from "@/pages/E17_InterPatientSynthesis";
+import E18_TourCoordinator from "@/pages/E18_TourCoordinator";
+import E19_ShopView from "@/pages/E19_ShopView";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -118,6 +120,20 @@ function Router() {
       <Route path="/cockpit">
         <AuthGuard>
           <E17_InterPatientSynthesis />
+        </AuthGuard>
+      </Route>
+
+      {/* Tour Coordinator View */}
+      <Route path="/coordinator">
+        <AuthGuard>
+          <E18_TourCoordinator />
+        </AuthGuard>
+      </Route>
+
+      {/* Shop / Orders View */}
+      <Route path="/shop">
+        <AuthGuard>
+          <E19_ShopView />
         </AuthGuard>
       </Route>
 

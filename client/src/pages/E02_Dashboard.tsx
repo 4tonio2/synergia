@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Calendar, Settings, Mic, Volume2, Stethoscope } from "lucide-react";
+import { Calendar, Settings, Mic, Volume2, Stethoscope, Truck, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/appStore";
@@ -140,6 +140,27 @@ export default function E02_Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Vue Coordinateur - Pour coordinateurs */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div 
+              className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl shadow-md border-2 border-orange-200 cursor-pointer hover:shadow-lg transition-all"
+              onClick={() => handleNavigate('/coordinator')}
+            >
+              <Truck size={28} className="text-orange-600 mb-2" />
+              <p className="text-sm font-bold text-orange-900">Coordinateur</p>
+              <p className="text-xs text-orange-700">Tournées</p>
+            </div>
+
+            <div 
+              className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl shadow-md border-2 border-green-200 cursor-pointer hover:shadow-lg transition-all"
+              onClick={() => handleNavigate('/shop')}
+            >
+              <ShoppingCart size={28} className="text-green-600 mb-2" />
+              <p className="text-sm font-bold text-green-900">Commandes</p>
+              <p className="text-xs text-green-700">Fournitures</p>
+            </div>
+          </div>
         </div>
       </div>
 
