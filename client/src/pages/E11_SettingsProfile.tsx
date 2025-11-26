@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronRight, User, Shield, Mic, Settings, Book, LogOut, ArrowLeft, Info } from 'lucide-react';
+import { ChevronRight, User, Shield, Mic, Settings, Book, LogOut, ArrowLeft, Info, Wifi } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -203,6 +203,20 @@ export default function E11_SettingsProfile() {
             <span className="flex items-center">
               <Info size={20} className="mr-2 text-indigo-600" />
               <span className="font-medium">À propos & Support</span>
+            </span>
+            <ChevronRight size={20} className="text-gray-400" />
+          </button>
+        </div>
+
+        {/* Mode hors ligne */}
+        <div className="bg-white rounded-xl shadow-md mb-6 p-4">
+          <button 
+            onClick={() => setLocation('/offline')}
+            className="flex items-center justify-between w-full py-2 text-gray-700 hover:bg-gray-50 px-2 rounded-lg transition"
+          >
+            <span className="flex items-center">
+              <Wifi size={20} className="mr-2 text-blue-600" />
+              <span className="font-medium">Mode hors ligne & Synchronisation</span>
             </span>
             <ChevronRight size={20} className="text-gray-400" />
           </button>

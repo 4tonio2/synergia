@@ -19,6 +19,7 @@ import E12_AboutSupport from "@/pages/E12_AboutSupport";
 import E13_RecordingDevice from "@/pages/E13_RecordingDevice";
 import E14_IASettings from "@/pages/E14_IASettings";
 import E15_AlertsConsole from "@/pages/E15_AlertsConsole";
+import E16_OfflineMode from "@/pages/E16_OfflineMode";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -102,6 +103,13 @@ function Router() {
       <Route path="/alerts">
         <AuthGuard>
           <E15_AlertsConsole />
+        </AuthGuard>
+      </Route>
+
+      {/* Offline Mode */}
+      <Route path="/offline">
+        <AuthGuard>
+          <E16_OfflineMode />
         </AuthGuard>
       </Route>
 
