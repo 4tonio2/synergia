@@ -34,10 +34,7 @@ export default function E11_SettingsProfile() {
   };
 
   const handleManageRecordingDevice = () => {
-    toast({
-      title: "Fonctionnalité à venir",
-      description: "Gestion de l'appareil d'enregistrement",
-    });
+    setLocation('/settings/recording-device');
   };
 
   const handleManageIASettings = () => {
