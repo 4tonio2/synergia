@@ -43,7 +43,7 @@ export default function E02_Dashboard() {
   };
 
   const handleAlertsClick = () => {
-    toast.info('Page des alertes à venir prochainement');
+    setLocation('/alerts');
   };
 
   // Stats
