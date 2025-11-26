@@ -20,6 +20,7 @@ import E13_RecordingDevice from "@/pages/E13_RecordingDevice";
 import E14_IASettings from "@/pages/E14_IASettings";
 import E15_AlertsConsole from "@/pages/E15_AlertsConsole";
 import E16_OfflineMode from "@/pages/E16_OfflineMode";
+import E17_InterPatientSynthesis from "@/pages/E17_InterPatientSynthesis";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -110,6 +111,13 @@ function Router() {
       <Route path="/offline">
         <AuthGuard>
           <E16_OfflineMode />
+        </AuthGuard>
+      </Route>
+
+      {/* Clinical Cockpit - Doctor View */}
+      <Route path="/cockpit">
+        <AuthGuard>
+          <E17_InterPatientSynthesis />
         </AuthGuard>
       </Route>
 

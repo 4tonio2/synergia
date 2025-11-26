@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Calendar, Settings, Mic, Volume2 } from "lucide-react";
+import { Calendar, Settings, Mic, Volume2, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/appStore";
@@ -102,7 +102,7 @@ export default function E02_Dashboard() {
           </Button>
 
           {/* Widget statistiques */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="p-4 bg-white rounded-xl shadow-md">
               <p className="text-sm text-gray-500">Nombre de visites</p>
               <p className="text-3xl font-bold text-blue-600">
@@ -119,6 +119,27 @@ export default function E02_Dashboard() {
               </p>
             </div>
           </div>
+
+          {/* Cockpit Clinique - Vue Médecin (si médecin) */}
+          {user?.medicalRole === 'medecin' && (
+            <div 
+              className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl shadow-md border-2 border-purple-200 cursor-pointer hover:shadow-lg transition-all mb-6"
+              onClick={() => handleNavigate('/cockpit')}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Stethoscope size={32} className="text-purple-600 mr-3" />
+                  <div>
+                    <p className="text-lg font-bold text-purple-900">Cockpit Clinique</p>
+                    <p className="text-sm text-purple-700">Synthèse inter-patients</p>
+                  </div>
+                </div>
+                <div className="text-purple-600">
+                  →
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
