@@ -1,18 +1,16 @@
 import { useLocation } from "wouter";
-import { Calendar, LogOut, Mic, Volume2 } from "lucide-react";
+import { Calendar, Settings, Mic, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/appStore";
 import { PatientCard } from "@/components/PatientCard";
 import { NavItem } from "@/components/NavItem";
-import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import { useCustomToast } from "@/hooks/useToast";
 
 export default function E02_Dashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { patients, visits, alerts } = useAppStore();
-  const { confirm } = useConfirmDialog();
   const toast = useCustomToast();
 
   const firstName = user?.firstName || user?.email?.split("@")[0] || "Utilisateur";
@@ -46,22 +44,6 @@ export default function E02_Dashboard() {
 
   const handleAlertsClick = () => {
     toast.info('Page des alertes à venir prochainement');
-  };
-
-  const handleLogout = async () => {
-    const confirmed = await confirm(
-      'Voulez-vous vraiment vous déconnecter ?',
-      {
-        title: "Déconnexion",
-        variant: "danger",
-        confirmText: "Se déconnecter",
-        cancelText: "Annuler"
-      }
-    );
-    
-    if (confirmed) {
-      await logout();
-    }
   };
 
   // Stats
@@ -156,10 +138,10 @@ export default function E02_Dashboard() {
           onClick={() => handleNavigate('/recordings')} 
         />
         <NavItem 
-          icon={LogOut} 
-          label="Se déconnecter" 
+          icon={Settings} 
+          label="Paramètres" 
           active={false} 
-          onClick={handleLogout} 
+          onClick={() => handleNavigate('/settings')} 
         />
       </div>
     </div>
