@@ -14,6 +14,7 @@ import E05_VisitFlow from "@/pages/E05_VisitFlow";
 import E08_History from "@/pages/E08_History";
 import E09_VisitDetail from "@/pages/E09_VisitDetail";
 import E10_Recordings from "@/pages/E10_Recordings";
+import E11_SettingsProfile from "@/pages/E11_SettingsProfile";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -95,6 +96,12 @@ function Router() {
 
       {/* Settings */}
       <Route path="/settings">
+        <AuthGuard>
+          <E11_SettingsProfile />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/settings/old">
         <AuthGuard>
           <SettingsPage />
         </AuthGuard>
