@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronRight, User, Shield, Mic, Settings, Book, LogOut, ArrowLeft } from 'lucide-react';
+import { ChevronRight, User, Shield, Mic, Settings, Book, LogOut, ArrowLeft, Info } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -198,6 +198,20 @@ export default function E11_SettingsProfile() {
               <span>Contact DPO : dpo@synergia-health.fr</span>
             </li>
           </ul>
+        </div>
+
+        {/* À propos & Support */}
+        <div className="bg-white rounded-xl shadow-md mb-6 p-4">
+          <button 
+            onClick={() => setLocation('/settings/about')}
+            className="flex items-center justify-between w-full py-2 text-gray-700 hover:bg-gray-50 px-2 rounded-lg transition"
+          >
+            <span className="flex items-center">
+              <Info size={20} className="mr-2 text-indigo-600" />
+              <span className="font-medium">À propos & Support</span>
+            </span>
+            <ChevronRight size={20} className="text-gray-400" />
+          </button>
         </div>
         
         {/* Bouton de déconnexion */}
