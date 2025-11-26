@@ -17,6 +17,7 @@ import E10_Recordings from "@/pages/E10_Recordings";
 import E11_SettingsProfile from "@/pages/E11_SettingsProfile";
 import E12_AboutSupport from "@/pages/E12_AboutSupport";
 import E13_RecordingDevice from "@/pages/E13_RecordingDevice";
+import E14_IASettings from "@/pages/E14_IASettings";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -112,6 +113,12 @@ function Router() {
       <Route path="/settings/recording-device">
         <AuthGuard>
           <E13_RecordingDevice />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/settings/ia">
+        <AuthGuard>
+          <E14_IASettings />
         </AuthGuard>
       </Route>
 

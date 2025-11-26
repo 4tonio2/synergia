@@ -38,10 +38,7 @@ export default function E11_SettingsProfile() {
   };
 
   const handleManageIASettings = () => {
-    toast({
-      title: "Fonctionnalité à venir",
-      description: "Paramètres IA avancés",
-    });
+    setLocation('/settings/ia');
   };
 
   // Générer les initiales du nom
