@@ -174,13 +174,6 @@ export default function E19_ShopView() {
           </div>
         </div>
 
-        {/* Info Odoo */}
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-          <p className="text-xs text-blue-800 font-medium">
-            🔗 Connecté à Odoo e-Shop + Inventory + Purchase
-          </p>
-        </div>
-
         {/* Grille des produits */}
         <div className="grid grid-cols-2 gap-4">
           {shopCategories.map((item, index) => (
