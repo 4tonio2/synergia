@@ -561,6 +561,180 @@ Génère une transmission médicale structurée pour le médecin traitant.`
     }
   });
 
+  /**
+   * POST /api/contacts/search
+   * Orchestrate n8n workflows to search contacts in Odoo based on visit notes.
+   *
+   * Expected body:
+   * { text: string }
+   *
+   * Assumes the first webhook (extract-contacts) returns JSON:
+   * { persons: Array<{ nom_complet?: string; tel?: string; email?: string; profession_code?: string;
+   *                    type_acteur?: string; grande_categorie_acteur?: string; sous_categorie_acteur?: string; }> }
+   *
+   * The second webhook (Agent-contacts) is called once per person with at least one non-empty field.
+   * If it returns a payload containing "[NONE]", we consider that no contact was found.
+   */
+  app.post('/api/contacts/search', async (req: Request, res: Response) => {
+    try {
+      const { text } = req.body as { text?: string };
+
+      if (!text || !text.trim()) {
+        return res.status(400).json({ error: 'Le texte de visite est requis' });
+      }
+
+      console.log('[CONTACTS] Calling n8n extract-contacts webhook...');
+
+      const extractResponse = await fetch(
+        'https://treeporteur-n8n.fr/webhook/extract-contacts',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userQuery: text.trim() }),
+        },
+      );
+
+      if (!extractResponse.ok) {
+        const body = await extractResponse.text().catch(() => '');
+        console.error('[CONTACTS] extract-contacts error:', extractResponse.status, body);
+        return res.status(502).json({
+          error: 'Erreur lors de la détection des personnes (extract-contacts)',
+        });
+      }
+
+      // We expect JSON from n8n. If not JSON, forward a clear error.
+      let extractData: any;
+      const contentType = extractResponse.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        extractData = await extractResponse.json();
+      } else {
+        const raw = await extractResponse.text();
+        console.error('[CONTACTS] Unexpected non-JSON response from extract-contacts:', raw);
+        return res.status(502).json({
+          error: 'Le webhook extract-contacts ne renvoie pas un JSON. Merci de le configurer pour renvoyer une liste JSON de personnes.',
+        });
+      }
+
+      const persons: any[] =
+        extractData.persons ||
+        extractData.Personnes ||
+        extractData.contacts ||
+        [];
+
+      if (!Array.isArray(persons) || persons.length === 0) {
+        console.log('[CONTACTS] No persons detected by extract-contacts');
+        return res.json({ persons: [] });
+      }
+
+      const fields = [
+        'nom_complet',
+        'tel',
+        'email',
+        'profession_code',
+        'type_acteur',
+        'grande_categorie_acteur',
+        'sous_categorie_acteur',
+      ];
+
+      const results: Array<{
+        input: any;
+        match: any | null;
+      }> = [];
+
+      for (const person of persons) {
+        const hasAnyField = fields.some((key) => {
+          const value = person?.[key];
+          return typeof value === 'string' ? value.trim().length > 0 : !!value;
+        });
+
+        if (!hasAnyField) {
+          results.push({
+            input: person,
+            match: null,
+          });
+          continue;
+        }
+
+        console.log(
+          '[CONTACTS] Calling n8n Agent-contacts for person:',
+          person?.nom_complet || '(sans nom)',
+        );
+
+        // Construire une userQuery textuelle à partir des champs de la personne
+        const personLines: string[] = [];
+        if (person.nom_complet) personLines.push(`nom_complet: ${person.nom_complet}`);
+        if (person.tel) personLines.push(`tel: ${person.tel}`);
+        if (person.email) personLines.push(`email: ${person.email}`);
+        if (person.profession_code) personLines.push(`profession_code: ${person.profession_code}`);
+        if (person.type_acteur) personLines.push(`type_acteur: ${person.type_acteur}`);
+        if (person.grande_categorie_acteur) {
+          personLines.push(
+            `grande_categorie_acteur: ${person.grande_categorie_acteur}`,
+          );
+        }
+        if (person.sous_categorie_acteur) {
+          personLines.push(`sous_categorie_acteur: ${person.sous_categorie_acteur}`);
+        }
+
+        const agentPayload = {
+          userQuery:
+            personLines.length > 0
+              ? personLines.join('\n')
+              : JSON.stringify(person),
+        };
+
+        const agentResponse = await fetch(
+          'https://treeporteur-n8n.fr/webhook/Agent-contacts',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(agentPayload),
+          },
+        );
+
+        if (!agentResponse.ok) {
+          const body = await agentResponse.text().catch(() => '');
+          console.error('[CONTACTS] Agent-contacts error:', agentResponse.status, body);
+          results.push({
+            input: person,
+            match: null,
+          });
+          continue;
+        }
+
+        const agentText = await agentResponse.text();
+
+        if (agentText.includes('[NONE]')) {
+          results.push({
+            input: person,
+            match: null,
+          });
+          continue;
+        }
+
+        let parsedMatch: any = null;
+        try {
+          parsedMatch = JSON.parse(agentText);
+        } catch {
+          parsedMatch = { raw: agentText };
+        }
+
+        results.push({
+          input: person,
+          match: parsedMatch,
+        });
+      }
+
+      res.json({ persons: results });
+    } catch (error: any) {
+      console.error('[CONTACTS] Unexpected error:', error);
+      res.status(500).json({
+        error: 'Erreur interne lors de la recherche de contacts',
+        details: error.message,
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
