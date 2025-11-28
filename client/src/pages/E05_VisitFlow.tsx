@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search } from 'lucide-react';
+import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search, Pencil, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -61,6 +61,10 @@ export default function E05_VisitFlow() {
   const [contactsResults, setContactsResults] = useState<
     Array<{ input: any; match: any | null }>
   >([]);
+  
+  // État pour l'édition des contacts
+  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
+  const [editingContactData, setEditingContactData] = useState<Record<string, string>>({});
   
   const handleBack = () => {
     if (patientId) {
@@ -215,6 +219,78 @@ export default function E05_VisitFlow() {
       toast.error('Erreur lors de la recherche de contacts dans Odoo');
     } finally {
       setIsSearchingContacts(false);
+    }
+  };
+
+  // Fonctions pour l'édition des contacts
+  const handleStartEditContact = (index: number, contactData: Record<string, any>) => {
+    // Convertir toutes les valeurs en strings pour l'édition
+    const editableData: Record<string, string> = {};
+    Object.keys(contactData).forEach(key => {
+      if (key !== 'raw' && key !== 'persons') {
+        editableData[key] = String(contactData[key] || '');
+      }
+    });
+    setEditingContactIndex(index);
+    setEditingContactData(editableData);
+  };
+
+  const handleCancelEditContact = () => {
+    setEditingContactIndex(null);
+    setEditingContactData({});
+  };
+
+  const handleSaveEditContact = (index: number) => {
+    setContactsResults(prev => {
+      const newResults = [...prev];
+      const currentItem = newResults[index];
+      
+      if (currentItem.match) {
+        // Mettre à jour le match avec les nouvelles données
+        const info = currentItem.match.Information || currentItem.match.information || currentItem.match;
+        const updatedInfo = { ...info, ...editingContactData };
+        
+        if (currentItem.match.Information) {
+          newResults[index] = {
+            ...currentItem,
+            match: { ...currentItem.match, Information: updatedInfo }
+          };
+        } else if (currentItem.match.information) {
+          newResults[index] = {
+            ...currentItem,
+            match: { ...currentItem.match, information: updatedInfo }
+          };
+        } else {
+          newResults[index] = {
+            ...currentItem,
+            match: updatedInfo
+          };
+        }
+      } else {
+        // Mettre à jour l'input si pas de match
+        newResults[index] = {
+          ...currentItem,
+          input: { ...currentItem.input, ...editingContactData }
+        };
+      }
+      
+      return newResults;
+    });
+    
+    setEditingContactIndex(null);
+    setEditingContactData({});
+    toast.success('Contact modifié avec succès');
+  };
+
+  const handleEditFieldChange = (key: string, value: string) => {
+    setEditingContactData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleAddField = () => {
+    const newFieldName = prompt('Nom du nouveau champ (ex: adresse, specialite, etc.):');
+    if (newFieldName && newFieldName.trim()) {
+      const normalizedKey = newFieldName.trim().toLowerCase().replace(/\s+/g, '_');
+      setEditingContactData(prev => ({ ...prev, [normalizedKey]: '' }));
     }
   };
 
@@ -535,20 +611,84 @@ export default function E05_VisitFlow() {
               {contactsResults.map((item, index) => {
                 const match = item.match;
                 const input = item.input || {};
+                const isEditing = editingContactIndex === index;
 
                 if (!match) {
+                  // Mode édition pour contact non trouvé
+                  if (isEditing) {
+                    return (
+                      <div
+                        key={index}
+                        className="border border-orange-200 bg-orange-50 rounded-xl p-3 text-sm"
+                      >
+                        <div className="flex justify-between items-center mb-3">
+                          <p className="font-semibold text-orange-800">
+                            Modifier le contact
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSaveEditContact(index)}
+                              className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                              title="Enregistrer"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={handleCancelEditContact}
+                              className="p-1.5 bg-gray-400 hover:bg-gray-500 text-white rounded-lg"
+                              title="Annuler"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {Object.keys(editingContactData).map((key) => (
+                            <div key={key} className="flex gap-2 items-center">
+                              <label className="w-1/3 text-xs font-medium text-gray-600 capitalize">
+                                {key.replace(/_/g, ' ')}
+                              </label>
+                              <Input
+                                value={editingContactData[key]}
+                                onChange={(e) => handleEditFieldChange(key, e.target.value)}
+                                className="flex-1 text-sm h-8"
+                              />
+                            </div>
+                          ))}
+                          <button
+                            onClick={handleAddField}
+                            className="text-xs text-blue-600 hover:text-blue-800 underline"
+                          >
+                            + Ajouter un champ
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={index}
                       className="border border-orange-200 bg-orange-50 rounded-xl p-3 text-sm"
                     >
-                      <p className="font-semibold text-orange-800">
-                        Personne {index + 1}{' '}
-                        {input.nom_complet ? `- ${input.nom_complet}` : ''}
-                      </p>
-                      <p className="text-gray-600 mt-1">
-                        Aucun contact correspondant trouvé dans Odoo.
-                      </p>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold text-orange-800">
+                            Personne {index + 1}{' '}
+                            {input.nom_complet ? `- ${input.nom_complet}` : ''}
+                          </p>
+                          <p className="text-gray-600 mt-1">
+                            Aucun contact correspondant trouvé dans Odoo.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleStartEditContact(index, input)}
+                          className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
+                          title="Modifier"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </div>
                       {input.nom_complet && (
                         <div className="mt-3">
                           <button
@@ -564,6 +704,58 @@ export default function E05_VisitFlow() {
                 }
 
                 const info = match.Information || match.information || match;
+                
+                // Mode édition pour contact trouvé
+                if (isEditing) {
+                  return (
+                    <div
+                      key={index}
+                      className="border border-blue-200 bg-blue-50 rounded-xl p-3 text-sm"
+                    >
+                      <div className="flex justify-between items-center mb-3">
+                        <p className="font-semibold text-blue-800">
+                          Modifier le contact
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSaveEditContact(index)}
+                            className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                            title="Enregistrer"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelEditContact}
+                            className="p-1.5 bg-gray-400 hover:bg-gray-500 text-white rounded-lg"
+                            title="Annuler"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {Object.keys(editingContactData).map((key) => (
+                          <div key={key} className="flex gap-2 items-center">
+                            <label className="w-1/3 text-xs font-medium text-gray-600 capitalize">
+                              {key.replace(/_/g, ' ')}
+                            </label>
+                            <Input
+                              value={editingContactData[key]}
+                              onChange={(e) => handleEditFieldChange(key, e.target.value)}
+                              className="flex-1 text-sm h-8"
+                            />
+                          </div>
+                        ))}
+                        <button
+                          onClick={handleAddField}
+                          className="text-xs text-blue-600 hover:text-blue-800 underline"
+                        >
+                          + Ajouter un champ
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
                 
                 // Si c'est un texte brut (raw), l'afficher directement avec le bon formatage
                 if (info.raw && typeof info.raw === 'string') {
@@ -598,10 +790,19 @@ export default function E05_VisitFlow() {
                             key={pIndex}
                             className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
                           >
-                            <p className="font-semibold text-blue-800">
-                              Information {pIndex + 1}{' '}
-                              {pName ? `- ${pName}` : ''}
-                            </p>
+                            <div className="flex justify-between items-start">
+                              <p className="font-semibold text-blue-800">
+                                Information {pIndex + 1}{' '}
+                                {pName ? `- ${pName}` : ''}
+                              </p>
+                              <button
+                                onClick={() => handleStartEditContact(index, personInfo)}
+                                className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
+                                title="Modifier"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                            </div>
                             <div className="mt-2 space-y-1">
                               {pKeys.map((key) => {
                                 const value = personInfo[key];
@@ -657,10 +858,19 @@ export default function E05_VisitFlow() {
                     key={index}
                     className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
                   >
-                    <p className="font-semibold text-blue-800">
-                      Personne {index + 1}{' '}
-                      {displayName ? `- ${displayName}` : ''}
-                    </p>
+                    <div className="flex justify-between items-start">
+                      <p className="font-semibold text-blue-800">
+                        Personne {index + 1}{' '}
+                        {displayName ? `- ${displayName}` : ''}
+                      </p>
+                      <button
+                        onClick={() => handleStartEditContact(index, info)}
+                        className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
+                        title="Modifier"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </div>
                     <div className="mt-2 space-y-1">
                       {hasDetails ? (
                         allKeys.map((key) => {
