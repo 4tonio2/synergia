@@ -217,6 +217,46 @@ export default function E05_VisitFlow() {
       setIsSearchingContacts(false);
     }
   };
+
+  const handleCreateContact = async (person: any, index: number) => {
+    try {
+      const response = await fetch('/api/contacts/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          person: person,
+          consent: 'approved',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Erreur lors de la création du contact');
+      }
+
+      const data = await response.json();
+      
+      toast.success(`Contact "${person.nom_complet}" créé avec succès dans Odoo (ID: ${data.odoo_id})`);
+      
+      // Mettre à jour le résultat pour afficher le contact créé
+      setContactsResults(prev => {
+        const newResults = [...prev];
+        newResults[index] = {
+          ...newResults[index],
+          match: {
+            Information: {
+              ...person,
+              odoo_id: data.odoo_id,
+            },
+          },
+        };
+        return newResults;
+      });
+    } catch (error: any) {
+      console.error('[CONTACTS] Erreur création contact:', error);
+      toast.error(error.message || 'Erreur lors de la création du contact');
+    }
+  };
   
   const handleSaveDraft = () => {
     // Créer une nouvelle visite en brouillon
@@ -501,16 +541,25 @@ export default function E05_VisitFlow() {
                   return (
                     <div
                       key={index}
-                      className="border border-gray-200 rounded-xl p-3 text-sm text-gray-600"
+                      className="border border-orange-200 bg-orange-50 rounded-xl p-3 text-sm"
                     >
-                      <p className="font-semibold">
+                      <p className="font-semibold text-orange-800">
                         Personne {index + 1}{' '}
                         {input.nom_complet ? `- ${input.nom_complet}` : ''}
                       </p>
-                      <p className="text-gray-500">
-                        Désolé, aucun contact correspondant n&apos;a été trouvé
-                        dans Odoo pour cette personne.
+                      <p className="text-gray-600 mt-1">
+                        Aucun contact correspondant trouvé dans Odoo.
                       </p>
+                      {input.nom_complet && (
+                        <div className="mt-3">
+                          <button
+                            onClick={() => handleCreateContact(input, index)}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                          >
+                            ✅ Créer ce nouveau contact dans Odoo
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 }
