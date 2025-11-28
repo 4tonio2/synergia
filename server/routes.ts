@@ -8,6 +8,8 @@ import { logAuthEvent } from "./authLogger";
 import multer from "multer";
 import OpenAI from "openai";
 import fs from "fs";
+import xmlrpc from "xmlrpc";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 // Configure multer for file uploads (store in memory)
 const upload = multer({ 
@@ -19,6 +21,165 @@ const upload = multer({
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Supabase dédié à l'ingestion / embeddings (2ᵉ projet Supabase)
+const SUPABASE_URL_1 = process.env.SUPABASE_URL_1;
+const SUPABASE_KEY_1 = process.env.SUPABASE_KEY_1;
+const SUPABASE_INGESTION_TABLE =
+  process.env.SUPABASE_TABLE_1 ||
+  process.env.SUPABASE_TABLE ||
+  "contact_embeddings";
+
+const supabaseIngestion =
+  SUPABASE_URL_1 && SUPABASE_KEY_1
+    ? createSupabaseClient(SUPABASE_URL_1, SUPABASE_KEY_1)
+    : null;
+const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+const MAX_EMBEDDING_CHARS = parseInt(process.env.MAX_EMBEDDING_CHARS || "8000", 10);
+
+const ODOO_URL = process.env.ODOO_URL;
+const ODOO_BASE_URL = (ODOO_URL || "").replace(/\/+$/, "");
+const ODOO_DB = process.env.ODOO_DB;
+const ODOO_LOGIN = process.env.ODOO_LOGIN;
+// On accepte soit ODOO_PASSWORD, soit ODOO_API_KEY (compatibilité ingestion.py)
+const ODOO_PASSWORD = process.env.ODOO_PASSWORD || process.env.ODOO_API_KEY;
+const ODOO_MODEL = process.env.ODOO_MODEL || "res.partner";
+
+let odooUid: number | null = null;
+let odooModelsClient: any | null = null;
+
+async function xmlrpcCall<T>(client: any, method: string, params: any[]): Promise<T> {
+  return new Promise((resolve, reject) => {
+    client.methodCall(method, params, (err: any, value: T) => {
+      if (err) return reject(err);
+      resolve(value);
+    });
+  });
+}
+
+async function getOdooModels() {
+  if (odooUid && odooModelsClient) {
+    return { uid: odooUid, models: odooModelsClient };
+  }
+
+  if (!ODOO_BASE_URL || !ODOO_DB || !ODOO_LOGIN || !ODOO_PASSWORD) {
+    throw new Error(
+      "ODOO_URL, ODOO_DB, ODOO_LOGIN et ODOO_PASSWORD (ou ODOO_API_KEY) doivent être définies pour créer des contacts Odoo",
+    );
+  }
+
+  const common = xmlrpc.createClient({ url: `${ODOO_BASE_URL}/xmlrpc/2/common` });
+  // Odoo 17.0 SaaS requires user_agent_env as 4th parameter (can be empty dict)
+  const uid = await xmlrpcCall<number>(common, "authenticate", [
+    ODOO_DB,
+    ODOO_LOGIN,
+    ODOO_PASSWORD,
+    {}, // user_agent_env - required for Odoo 17.0
+  ]);
+
+  if (!uid) {
+    throw new Error("Authentification Odoo échouée");
+  }
+
+  const models = xmlrpc.createClient({ url: `${ODOO_BASE_URL}/xmlrpc/2/object` });
+  odooUid = uid;
+  odooModelsClient = models;
+
+  return { uid, models };
+}
+
+function normalizeString(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => String(v).trim())
+      .filter((v) => v.length > 0)
+      .join(", ");
+  }
+  return String(value).trim();
+}
+
+function buildContentFromPerson(person: any): string {
+  const lines: string[] = [];
+
+  const name = normalizeString(person.nom_complet);
+  if (name) lines.push(name);
+
+  const tel = normalizeString(person.tel);
+  const email = normalizeString(person.email);
+  if (tel) lines.push(`Téléphone: ${tel}`);
+  if (email) lines.push(`Email: ${email}`);
+
+  const profession = normalizeString(person.profession_code);
+  const actorType = normalizeString(person.type_acteur);
+  const majorCategories = normalizeString(person.grande_categorie_acteur);
+  const subcategories = normalizeString(person.sous_categorie_acteur);
+
+  if (profession) lines.push(`Profession: ${profession}`);
+  if (actorType) lines.push(`Type d'acteur: ${actorType}`);
+  if (majorCategories) lines.push(`Catégories: ${majorCategories}`);
+  if (subcategories) lines.push(`Sous-catégories: ${subcategories}`);
+
+  return lines.join("\n").trim();
+}
+
+function truncateForEmbedding(text: string): string {
+  if (text.length <= MAX_EMBEDDING_CHARS) return text;
+  return text.slice(0, MAX_EMBEDDING_CHARS);
+}
+
+async function generateEmbeddingVector(text: string): Promise<number[]> {
+  const response = await openai.embeddings.create({
+    model: EMBEDDING_MODEL,
+    input: text,
+  });
+  return response.data[0].embedding as unknown as number[];
+}
+
+async function createOdooContactFromPerson(person: any): Promise<number> {
+  const { uid, models } = await getOdooModels();
+
+  const values: any = {
+    name: person.nom_complet,
+  };
+
+  // Use standard fields for phone and email (not custom x_phone, x_email)
+  if (person.tel) {
+    values.phone = person.tel;
+  }
+  if (person.email) {
+    values.email = person.email;
+  }
+
+  // Use custom fields for professional information
+  if (person.profession_code) {
+    values.x_studio_profession_code = person.profession_code;
+  }
+  if (person.type_acteur) {
+    values.x_studio_type_actor = person.type_acteur;
+  }
+  if (person.grande_categorie_acteur) {
+    values.x_studio_major_categories = person.grande_categorie_acteur;
+  }
+  if (person.sous_categorie_acteur) {
+    values.x_studio_subcategories = person.sous_categorie_acteur;
+  }
+
+  const createdId = await xmlrpcCall<number>(models, "execute_kw", [
+    ODOO_DB,
+    uid,
+    ODOO_PASSWORD,
+    ODOO_MODEL,
+    "create",
+    [values],
+  ]);
+
+  if (!createdId) {
+    throw new Error("Échec de la création du contact dans Odoo");
+  }
+
+  return createdId;
+}
 
 // Middleware to verify Supabase JWT token
 async function isAuthenticated(req: any, res: Response, next: NextFunction) {
@@ -602,24 +763,71 @@ Génère une transmission médicale structurée pour le médecin traitant.`
         });
       }
 
-      // We expect JSON from n8n. If not JSON, forward a clear error.
-      let extractData: any;
       const contentType = extractResponse.headers.get('content-type') || '';
+
+      let persons: any[] = [];
+
       if (contentType.includes('application/json')) {
-        extractData = await extractResponse.json();
+        // Cas où le workflow renvoie déjà du JSON structuré
+        const extractData: any = await extractResponse.json();
+        persons =
+          extractData.persons ||
+          extractData.Personnes ||
+          extractData.contacts ||
+          [];
       } else {
+        // Cas actuel : réponse texte au format:
+        // Personne 1:
+        // - nom_complet: ...
+        // - tel: ...
+        // ...
         const raw = await extractResponse.text();
-        console.error('[CONTACTS] Unexpected non-JSON response from extract-contacts:', raw);
-        return res.status(502).json({
-          error: 'Le webhook extract-contacts ne renvoie pas un JSON. Merci de le configurer pour renvoyer une liste JSON de personnes.',
+        console.log(
+          '[CONTACTS] Text response from extract-contacts, attempting to parse:',
+        );
+        console.log(raw);
+
+        const blocks = raw
+          .split(/Personne\s+\d+\s*:/i)
+          .map((b) => b.trim())
+          .filter((b) => b.length > 0);
+
+        persons = blocks.map((block) => {
+          const person: any = {};
+          const lines = block.split('\n');
+
+          for (const line of lines) {
+            const match = line.match(/^\s*-\s*([^:]+):\s*(.*)$/);
+            if (!match) continue;
+
+            const rawKey = match[1].trim();
+            const value = match[2].trim();
+
+            // Normaliser les clés vers le format attendu
+            const key = rawKey
+              .toLowerCase()
+              .replace(/\s+/g, '_')
+              .replace(/[^\w_]/g, '');
+
+            switch (key) {
+              case 'nom_complet':
+              case 'tel':
+              case 'email':
+              case 'profession_code':
+              case 'type_acteur':
+              case 'grande_categorie_acteur':
+              case 'sous_categorie_acteur':
+                person[key] = value;
+                break;
+              default:
+                // On garde quand même au cas où
+                person[key] = value;
+            }
+          }
+
+          return person;
         });
       }
-
-      const persons: any[] =
-        extractData.persons ||
-        extractData.Personnes ||
-        extractData.contacts ||
-        [];
 
       if (!Array.isArray(persons) || persons.length === 0) {
         console.log('[CONTACTS] No persons detected by extract-contacts');
@@ -639,6 +847,8 @@ Génère une transmission médicale structurée pour le médecin traitant.`
       const results: Array<{
         input: any;
         match: any | null;
+        requiresConsent?: boolean;
+        consentAction?: string;
       }> = [];
 
       for (const person of persons) {
@@ -705,9 +915,13 @@ Génère une transmission médicale structurée pour le médecin traitant.`
         const agentText = await agentResponse.text();
 
         if (agentText.includes('[NONE]')) {
+          // Match is null - require user consent before upserting
+          console.log('[CONTACTS] No match found for person:', person?.nom_complet);
           results.push({
             input: person,
             match: null,
+            requiresConsent: true,
+            consentAction: 'pending', // pending | approved | rejected
           });
           continue;
         }
@@ -730,6 +944,293 @@ Génère une transmission médicale structurée pour le médecin traitant.`
       console.error('[CONTACTS] Unexpected error:', error);
       res.status(500).json({
         error: 'Erreur interne lors de la recherche de contacts',
+        details: error.message,
+      });
+    }
+  });
+
+  /**
+   * POST /api/contacts/consent
+   *
+   * Handle user consent for a contact that has no match (match is null).
+   * If approved, automatically upserts to Odoo and Supabase.
+   * If rejected, returns without upserting.
+   *
+   * Body attendu:
+   * {
+   *   "person": { ... },
+   *   "consent": "approved" | "rejected",
+   *   "odoo_id": number | null (optional)
+   * }
+   */
+  app.post('/api/contacts/consent', async (req: Request, res: Response) => {
+    try {
+      const body = req.body as { person?: any; consent?: string; odoo_id?: number | null };
+      const person = body.person || body;
+      const consent = body.consent?.toLowerCase();
+
+      if (!person || typeof person !== 'object') {
+        return res.status(400).json({
+          error: 'Le corps de la requête doit contenir un objet "person"',
+        });
+      }
+
+      if (!consent || !['approved', 'rejected'].includes(consent)) {
+        return res.status(400).json({
+          error: 'Le consentement doit être "approved" ou "rejected"',
+        });
+      }
+
+      const name = normalizeString(person.nom_complet);
+      if (!name) {
+        return res.status(400).json({
+          error: 'nom_complet est requis',
+        });
+      }
+
+      // If rejected, just return success without upserting
+      if (consent === 'rejected') {
+        console.log('[CONTACTS] User rejected contact:', name);
+        return res.json({
+          success: true,
+          action: 'rejected',
+          message: 'Contact rejeté - aucun upsert effectué',
+        });
+      }
+
+      // If approved, proceed with upsert (reuse the upsert logic)
+      console.log('[CONTACTS] User approved contact:', name, '- proceeding with upsert');
+
+      let odooId = body.odoo_id ?? person.odoo_id;
+
+      // 1. Création dans Odoo si besoin
+      if (!odooId) {
+        console.log('[CONTACTS] Création du contact dans Odoo pour', name);
+        try {
+          odooId = await createOdooContactFromPerson(person);
+          console.log('[CONTACTS] Contact créé dans Odoo avec id', odooId);
+        } catch (odooError: any) {
+          console.error('[CONTACTS] Erreur création Odoo:', odooError);
+          return res.status(502).json({
+            error: 'Erreur lors de la création du contact dans Odoo',
+            details: odooError.message,
+          });
+        }
+      }
+
+      // 2. Préparation du payload pour Supabase
+      const content = buildContentFromPerson(person);
+      const metadata = {
+        ...person,
+        odoo_id: odooId,
+      };
+
+      const payload = {
+        odoo_id: odooId,
+        contact_name: person.nom_complet,
+        phone: person.tel || null,
+        mobile: null,
+        email: person.email || null,
+        profession_code: person.profession_code || null,
+        major_categories: person.grande_categorie_acteur || null,
+        actor_type: person.type_acteur || null,
+        subcategories: person.sous_categorie_acteur || null,
+        content,
+        metadata,
+      };
+
+      // 3. Génération de l'embedding
+      let embedding: number[];
+      try {
+        const embeddingText = truncateForEmbedding(content);
+        embedding = await generateEmbeddingVector(embeddingText);
+      } catch (embError: any) {
+        console.error('[CONTACTS] Erreur génération embedding:', embError);
+        return res.status(502).json({
+          error: 'Erreur lors de la génération de l\'embedding OpenAI',
+          details: embError.message,
+        });
+      }
+
+      // 4. Upsert dans Supabase
+      try {
+        if (!supabaseIngestion) {
+          console.error(
+            "[CONTACTS] supabaseIngestion non configuré. Définir SUPABASE_URL_1 et SUPABASE_KEY_1 dans l'environnement.",
+          );
+          return res.status(500).json({
+            error:
+              "Client Supabase d'ingestion non configuré. Vérifiez SUPABASE_URL_1 et SUPABASE_KEY_1.",
+          });
+        }
+
+        const { data, error } = await supabaseIngestion
+          .from(SUPABASE_INGESTION_TABLE)
+          .upsert({ ...payload, embedding })
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          console.error('[CONTACTS] Erreur Supabase upsert:', error);
+          return res.status(502).json({
+            error: 'Erreur lors de l\'upsert dans Supabase',
+            details: error.message,
+          });
+        }
+
+        return res.json({
+          success: true,
+          action: 'approved',
+          message: 'Contact approuvé et inséré avec succès',
+          odoo_id: odooId,
+          supabase: data,
+        });
+      } catch (dbError: any) {
+        console.error('[CONTACTS] Exception Supabase upsert:', dbError);
+        return res.status(502).json({
+          error: 'Erreur lors de l\'upsert dans Supabase',
+          details: dbError.message,
+        });
+      }
+    } catch (error: any) {
+      console.error('[CONTACTS] Unexpected error in /api/contacts/consent:', error);
+      res.status(500).json({
+        error: 'Erreur interne lors du traitement du consentement',
+        details: error.message,
+      });
+    }
+  });
+
+  /**
+   * POST /api/contacts/upsert
+   *
+   * Crée un contact dans Odoo (si odoo_id absent) et l'upsert dans Supabase
+   * dans la table d'embeddings (par défaut "contact_embeddings").
+   *
+   * Body attendu:
+   * {
+   *   "person": {
+   *     "nom_complet": "...",
+   *     "tel": "...",
+   *     "email": "...",
+   *     "profession_code": "...",
+   *     "type_acteur": "...",
+   *     "grande_categorie_acteur": "...",
+   *     "sous_categorie_acteur": "..."
+   *   },
+   *   "odoo_id": number | null
+   * }
+   */
+  app.post('/api/contacts/upsert', async (req: Request, res: Response) => {
+    try {
+      const body = req.body as { person?: any; odoo_id?: number | null };
+      const person = body.person || body;
+
+      if (!person || typeof person !== 'object') {
+        return res.status(400).json({
+          error: 'Le corps de la requête doit contenir un objet "person"',
+        });
+      }
+
+      const name = normalizeString(person.nom_complet);
+      if (!name) {
+        return res.status(400).json({
+          error: 'nom_complet est requis pour créer un contact',
+        });
+      }
+
+      let odooId = body.odoo_id ?? person.odoo_id;
+
+      // 1. Création dans Odoo si besoin
+      if (!odooId) {
+        console.log('[CONTACTS] Création du contact dans Odoo pour', name);
+        try {
+          odooId = await createOdooContactFromPerson(person);
+          console.log('[CONTACTS] Contact créé dans Odoo avec id', odooId);
+        } catch (odooError: any) {
+          console.error('[CONTACTS] Erreur création Odoo:', odooError);
+          return res.status(502).json({
+            error: 'Erreur lors de la création du contact dans Odoo',
+            details: odooError.message,
+          });
+        }
+      }
+
+      // 2. Préparation du payload pour Supabase
+      const content = buildContentFromPerson(person);
+      const metadata = {
+        ...person,
+        odoo_id: odooId,
+      };
+
+      const payload = {
+        odoo_id: odooId,
+        contact_name: person.nom_complet,
+        phone: person.tel || null,
+        mobile: null,
+        email: person.email || null,
+        profession_code: person.profession_code || null,
+        major_categories: person.grande_categorie_acteur || null,
+        actor_type: person.type_acteur || null,
+        subcategories: person.sous_categorie_acteur || null,
+        content,
+        metadata,
+      };
+
+      // 3. Génération de l'embedding
+      let embedding: number[];
+      try {
+        const embeddingText = truncateForEmbedding(content);
+        embedding = await generateEmbeddingVector(embeddingText);
+      } catch (embError: any) {
+        console.error('[CONTACTS] Erreur génération embedding:', embError);
+        return res.status(502).json({
+          error: 'Erreur lors de la génération de l\'embedding OpenAI',
+          details: embError.message,
+        });
+      }
+
+      // 4. Upsert dans Supabase
+      try {
+        if (!supabaseIngestion) {
+          console.error(
+            "[CONTACTS] supabaseIngestion non configuré. Définir SUPABASE_URL_1 et SUPABASE_KEY_1 dans l'environnement.",
+          );
+          return res.status(500).json({
+            error:
+              "Client Supabase d'ingestion non configuré. Vérifiez SUPABASE_URL_1 et SUPABASE_KEY_1.",
+          });
+        }
+
+        const { data, error } = await supabaseIngestion
+          .from(SUPABASE_INGESTION_TABLE)
+          .upsert({ ...payload, embedding })
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          console.error('[CONTACTS] Erreur Supabase upsert:', error);
+          return res.status(502).json({
+            error: 'Erreur lors de l\'upsert dans Supabase',
+            details: error.message,
+          });
+        }
+
+        return res.json({
+          odoo_id: odooId,
+          supabase: data,
+        });
+      } catch (dbError: any) {
+        console.error('[CONTACTS] Exception Supabase upsert:', dbError);
+        return res.status(502).json({
+          error: 'Erreur lors de l\'upsert dans Supabase',
+          details: dbError.message,
+        });
+      }
+    } catch (error: any) {
+      console.error('[CONTACTS] Unexpected error in /api/contacts/upsert:', error);
+      res.status(500).json({
+        error: 'Erreur interne lors de la création / ingestion du contact',
         details: error.message,
       });
     }
