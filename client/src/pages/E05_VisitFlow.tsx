@@ -565,18 +565,33 @@ export default function E05_VisitFlow() {
 
                 const info = match.Information || match.information || match;
                 
-                // Normaliser les champs (le webhook peut retourner différentes clés)
+                // Afficher toutes les informations retournées par le webhook
                 const displayName = info.nom_complet || info.name || info.display_name || '';
-                const displayPhone = info.tel || info.phone || info.mobile || '';
-                const displayEmail = info.email || '';
-                const displayProfession = info.profession_code || info.function || info.job_position || '';
-                const displayTypeActeur = info.type_acteur || info.x_studio_type_actor || '';
-                const displayCategorie = info.grande_categorie_acteur || info.x_studio_major_categories || info.category_id || '';
-                const displaySousCategorie = info.sous_categorie_acteur || info.x_studio_subcategories || '';
-                const displayOdooId = info.odoo_id || info.id || '';
                 
-                const hasDetails = displayPhone || displayEmail || displayProfession || 
-                                   displayTypeActeur || displayCategorie || displaySousCategorie || displayOdooId;
+                // Récupérer toutes les clés de l'objet info pour les afficher
+                const allKeys = Object.keys(info);
+                const hasDetails = allKeys.length > 0;
+
+                // Fonction pour formater la valeur (gérer les objets, arrays, etc.)
+                const formatValue = (value: any): string => {
+                  if (value === null || value === undefined) return '';
+                  if (typeof value === 'object') {
+                    if (Array.isArray(value)) {
+                      return value.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(', ');
+                    }
+                    return JSON.stringify(value, null, 2);
+                  }
+                  return String(value);
+                };
+
+                // Fonction pour formater le nom de la clé
+                const formatKey = (key: string): string => {
+                  return key
+                    .replace(/_/g, ' ')
+                    .replace(/([A-Z])/g, ' $1')
+                    .replace(/^./, str => str.toUpperCase())
+                    .trim();
+                };
 
                 return (
                   <div
@@ -587,36 +602,36 @@ export default function E05_VisitFlow() {
                       Personne {index + 1}{' '}
                       {displayName ? `- ${displayName}` : ''}
                     </p>
-                    <div className="mt-1 space-y-1">
-                      {displayOdooId && (
-                        <p className="text-green-600 font-medium">
-                          ✅ ID Odoo : {displayOdooId}
+                    <div className="mt-2 space-y-1">
+                      {hasDetails ? (
+                        allKeys.map((key) => {
+                          const value = info[key];
+                          const formattedValue = formatValue(value);
+                          
+                          // Ne pas afficher les valeurs vides
+                          if (!formattedValue || formattedValue === '""' || formattedValue === 'null') {
+                            return null;
+                          }
+                          
+                          return (
+                            <p key={key} className="break-words">
+                              <span className="font-medium text-gray-600">{formatKey(key)} :</span>{' '}
+                              {typeof value === 'object' ? (
+                                <pre className="mt-1 p-2 bg-white rounded text-xs overflow-x-auto whitespace-pre-wrap">
+                                  {formattedValue}
+                                </pre>
+                              ) : (
+                                <span>{formattedValue}</span>
+                              )}
+                            </p>
+                          );
+                        })
+                      ) : (
+                        <p className="text-gray-500">
+                          Contact trouvé, mais aucune information détaillée
+                          n&apos;a été renvoyée.
                         </p>
                       )}
-                      {displayPhone && <p>Téléphone : {displayPhone}</p>}
-                      {displayEmail && <p>Email : {displayEmail}</p>}
-                      {displayProfession && (
-                        <p>Profession : {displayProfession}</p>
-                      )}
-                      {displayTypeActeur && (
-                        <p>Type d&apos;acteur : {displayTypeActeur}</p>
-                      )}
-                      {displayCategorie && (
-                        <p>
-                          Grande catégorie : {displayCategorie}
-                        </p>
-                      )}
-                      {displaySousCategorie && (
-                        <p>
-                          Sous-catégorie : {displaySousCategorie}
-                        </p>
-                      )}
-                      {!hasDetails && (
-                          <p className="text-gray-500">
-                            Contact trouvé, mais aucune information détaillée
-                            n&apos;a été renvoyée.
-                          </p>
-                        )}
                     </div>
                   </div>
                 );
