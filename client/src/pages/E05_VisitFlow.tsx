@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { ArrowLeft, Sparkles, Send, Zap, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -54,9 +54,13 @@ export default function E05_VisitFlow() {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isGeneratingTransmission, setIsGeneratingTransmission] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
   const [transmissionContent, setTransmissionContent] = useState('');
   const [showTransmissionModal, setShowTransmissionModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
+  const [contactsResults, setContactsResults] = useState<
+    Array<{ input: any; match: any | null }>
+  >([]);
   
   const handleBack = () => {
     if (patientId) {
@@ -176,6 +180,41 @@ export default function E05_VisitFlow() {
       toast.error('Erreur lors de la génération de la transmission');
     } finally {
       setIsGeneratingTransmission(false);
+    }
+  };
+
+  const handleSearchContacts = async () => {
+    if (!formData.notesRaw || !formData.notesRaw.trim()) {
+      toast.error('Veuillez d\'abord saisir ou dicter des notes de visite');
+      return;
+    }
+
+    setIsSearchingContacts(true);
+    setContactsResults([]);
+
+    try {
+      const response = await fetch('/api/contacts/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: formData.notesRaw }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la recherche de contacts');
+      }
+
+      const data = await response.json();
+      const persons = Array.isArray(data.persons) ? data.persons : [];
+      setContactsResults(persons);
+
+      if (!persons.length) {
+        toast.info('Aucun contact détecté dans la transcription');
+      }
+    } catch (error) {
+      console.error('[CONTACTS] Erreur recherche contacts:', error);
+      toast.error('Erreur lors de la recherche de contacts dans Odoo');
+    } finally {
+      setIsSearchingContacts(false);
     }
   };
   
@@ -427,7 +466,103 @@ export default function E05_VisitFlow() {
             <Zap className="w-5 h-5 mr-2" />
             Actions rapides...
           </Button>
+
+          <Button
+            onClick={handleSearchContacts}
+            disabled={isSearchingContacts || !formData.notesRaw}
+            variant="outline"
+            className="w-full h-12 rounded-full"
+          >
+            {isSearchingContacts ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Recherche des contacts Odoo...
+              </>
+            ) : (
+              <>
+                <Search className="w-5 h-5 mr-2" />
+                Rechercher les contacts dans Odoo
+              </>
+            )}
+          </Button>
         </div>
+
+        {contactsResults.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Résultats contacts Odoo
+            </h3>
+            <div className="space-y-3">
+              {contactsResults.map((item, index) => {
+                const match = item.match;
+                const input = item.input || {};
+
+                if (!match) {
+                  return (
+                    <div
+                      key={index}
+                      className="border border-gray-200 rounded-xl p-3 text-sm text-gray-600"
+                    >
+                      <p className="font-semibold">
+                        Personne {index + 1}{' '}
+                        {input.nom_complet ? `- ${input.nom_complet}` : ''}
+                      </p>
+                      <p className="text-gray-500">
+                        Désolé, aucun contact correspondant n&apos;a été trouvé
+                        dans Odoo pour cette personne.
+                      </p>
+                    </div>
+                  );
+                }
+
+                const info = match.Information || match.information || match;
+
+                return (
+                  <div
+                    key={index}
+                    className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
+                  >
+                    <p className="font-semibold text-blue-800">
+                      Personne {index + 1}{' '}
+                      {info.nom_complet ? `- ${info.nom_complet}` : ''}
+                    </p>
+                    <div className="mt-1 space-y-1">
+                      {info.tel && <p>Téléphone : {info.tel}</p>}
+                      {info.email && <p>Email : {info.email}</p>}
+                      {info.profession_code && (
+                        <p>Profession : {info.profession_code}</p>
+                      )}
+                      {info.type_acteur && (
+                        <p>Type d&apos;acteur : {info.type_acteur}</p>
+                      )}
+                      {info.grande_categorie_acteur && (
+                        <p>
+                          Grande catégorie : {info.grande_categorie_acteur}
+                        </p>
+                      )}
+                      {info.sous_categorie_acteur && (
+                        <p>
+                          Sous-catégorie : {info.sous_categorie_acteur}
+                        </p>
+                      )}
+                      {!info.tel &&
+                        !info.email &&
+                        !info.profession_code &&
+                        !info.type_acteur &&
+                        !info.grande_categorie_acteur &&
+                        !info.sous_categorie_acteur && (
+                          <p className="text-gray-500">
+                            Contact trouvé, mais aucune information détaillée
+                            n&apos;a été renvoyée.
+                          </p>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
         {/* Boutons de sauvegarde */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
