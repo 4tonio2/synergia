@@ -520,7 +520,7 @@ export default function E05_VisitFlow() {
             ) : (
               <>
                 <Search className="w-5 h-5 mr-2" />
-                Rechercher les contacts dans Odoo
+                Autofill
               </>
             )}
           </Button>
@@ -564,6 +564,19 @@ export default function E05_VisitFlow() {
                 }
 
                 const info = match.Information || match.information || match;
+                
+                // Normaliser les champs (le webhook peut retourner différentes clés)
+                const displayName = info.nom_complet || info.name || info.display_name || '';
+                const displayPhone = info.tel || info.phone || info.mobile || '';
+                const displayEmail = info.email || '';
+                const displayProfession = info.profession_code || info.function || info.job_position || '';
+                const displayTypeActeur = info.type_acteur || info.x_studio_type_actor || '';
+                const displayCategorie = info.grande_categorie_acteur || info.x_studio_major_categories || info.category_id || '';
+                const displaySousCategorie = info.sous_categorie_acteur || info.x_studio_subcategories || '';
+                const displayOdooId = info.odoo_id || info.id || '';
+                
+                const hasDetails = displayPhone || displayEmail || displayProfession || 
+                                   displayTypeActeur || displayCategorie || displaySousCategorie || displayOdooId;
 
                 return (
                   <div
@@ -572,33 +585,33 @@ export default function E05_VisitFlow() {
                   >
                     <p className="font-semibold text-blue-800">
                       Personne {index + 1}{' '}
-                      {info.nom_complet ? `- ${info.nom_complet}` : ''}
+                      {displayName ? `- ${displayName}` : ''}
                     </p>
                     <div className="mt-1 space-y-1">
-                      {info.tel && <p>Téléphone : {info.tel}</p>}
-                      {info.email && <p>Email : {info.email}</p>}
-                      {info.profession_code && (
-                        <p>Profession : {info.profession_code}</p>
-                      )}
-                      {info.type_acteur && (
-                        <p>Type d&apos;acteur : {info.type_acteur}</p>
-                      )}
-                      {info.grande_categorie_acteur && (
-                        <p>
-                          Grande catégorie : {info.grande_categorie_acteur}
+                      {displayOdooId && (
+                        <p className="text-green-600 font-medium">
+                          ✅ ID Odoo : {displayOdooId}
                         </p>
                       )}
-                      {info.sous_categorie_acteur && (
+                      {displayPhone && <p>Téléphone : {displayPhone}</p>}
+                      {displayEmail && <p>Email : {displayEmail}</p>}
+                      {displayProfession && (
+                        <p>Profession : {displayProfession}</p>
+                      )}
+                      {displayTypeActeur && (
+                        <p>Type d&apos;acteur : {displayTypeActeur}</p>
+                      )}
+                      {displayCategorie && (
                         <p>
-                          Sous-catégorie : {info.sous_categorie_acteur}
+                          Grande catégorie : {displayCategorie}
                         </p>
                       )}
-                      {!info.tel &&
-                        !info.email &&
-                        !info.profession_code &&
-                        !info.type_acteur &&
-                        !info.grande_categorie_acteur &&
-                        !info.sous_categorie_acteur && (
+                      {displaySousCategorie && (
+                        <p>
+                          Sous-catégorie : {displaySousCategorie}
+                        </p>
+                      )}
+                      {!hasDetails && (
                           <p className="text-gray-500">
                             Contact trouvé, mais aucune information détaillée
                             n&apos;a été renvoyée.
