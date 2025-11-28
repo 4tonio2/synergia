@@ -66,36 +66,96 @@ async function generateEmbeddingVector(text: string): Promise<number[]> {
 }
 
 async function createOdooContactViaWebhook(person: any): Promise<number> {
-  console.log('[ODOO] Calling n8n create-contact webhook for:', person.nom_complet);
+  console.log('[ODOO] Creating contact via Odoo JSON-RPC for:', person.nom_complet);
   
-  const response = await fetch('https://treeporteur-n8n.fr/webhook/create-contact', {
+  const ODOO_URL = process.env.ODOO_URL;
+  const ODOO_DB = process.env.ODOO_DB;
+  const ODOO_LOGIN = process.env.ODOO_LOGIN;
+  const ODOO_PASSWORD = process.env.ODOO_PASSWORD;
+
+  if (!ODOO_URL || !ODOO_DB || !ODOO_LOGIN || !ODOO_PASSWORD) {
+    throw new Error('Configuration Odoo manquante (ODOO_URL, ODOO_DB, ODOO_LOGIN, ODOO_PASSWORD)');
+  }
+
+  const baseUrl = ODOO_URL.replace(/\/+$/, '');
+
+  // 1. Authenticate
+  console.log('[ODOO] Authenticating...');
+  const authResponse = await fetch(`${baseUrl}/web/session/authenticate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: person.nom_complet,
-      phone: person.tel || '',
-      email: person.email || '',
-      profession_code: person.profession_code || '',
-      type_acteur: person.type_acteur || '',
-      grande_categorie_acteur: person.grande_categorie_acteur || '',
-      sous_categorie_acteur: person.sous_categorie_acteur || '',
+      jsonrpc: '2.0',
+      params: {
+        db: ODOO_DB,
+        login: ODOO_LOGIN,
+        password: ODOO_PASSWORD,
+      },
     }),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error('[ODOO] Webhook error:', response.status, errorText);
-    throw new Error(`Erreur webhook Odoo: ${response.status} - ${errorText}`);
+  if (!authResponse.ok) {
+    throw new Error(`Authentification Odoo échouée: ${authResponse.status}`);
   }
 
-  const result = await response.json();
+  const authData = await authResponse.json() as any;
   
-  // Le webhook devrait retourner { odoo_id: number } ou { id: number }
-  const odooId = (result as any).odoo_id || (result as any).id || (result as any).contact_id;
+  if (authData.error) {
+    throw new Error(`Erreur auth Odoo: ${authData.error.data?.message || authData.error.message}`);
+  }
+
+  console.log('[ODOO] Authenticated successfully');
+
+  // Extract session cookies
+  const cookies = authResponse.headers.get('set-cookie') || '';
+
+  // 2. Create contact
+  console.log('[ODOO] Creating contact...');
+  
+  const contactData: any = {
+    name: person.nom_complet,
+  };
+
+  if (person.tel) contactData.phone = person.tel;
+  if (person.email) contactData.email = person.email;
+  if (person.profession_code) contactData.x_studio_profession_code = person.profession_code;
+  if (person.type_acteur) contactData.x_studio_type_actor = person.type_acteur;
+  if (person.grande_categorie_acteur) contactData.x_studio_major_categories = person.grande_categorie_acteur;
+  if (person.sous_categorie_acteur) contactData.x_studio_subcategories = person.sous_categorie_acteur;
+
+  const createResponse = await fetch(`${baseUrl}/web/dataset/call_kw`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': cookies,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'call',
+      params: {
+        model: 'res.partner',
+        method: 'create',
+        args: [contactData],
+        kwargs: {},
+      },
+    }),
+  });
+
+  if (!createResponse.ok) {
+    throw new Error(`Création contact Odoo échouée: ${createResponse.status}`);
+  }
+
+  const createData = await createResponse.json() as any;
+  
+  if (createData.error) {
+    throw new Error(`Erreur création Odoo: ${createData.error.data?.message || createData.error.message}`);
+  }
+
+  const odooId = createData.result;
   
   if (!odooId) {
-    console.error('[ODOO] No ID in webhook response:', result);
-    throw new Error('Le webhook n\'a pas retourné d\'ID Odoo');
+    console.error('[ODOO] No ID in response:', createData);
+    throw new Error('Odoo n\'a pas retourné d\'ID');
   }
 
   console.log('[ODOO] Contact created with ID:', odooId);
@@ -104,7 +164,7 @@ async function createOdooContactViaWebhook(person: any): Promise<number> {
 
 /**
  * POST /api/contacts/upsert
- * Simplified contact creation using n8n webhook instead of direct Odoo XML-RPC
+ * Creates contact in Odoo using JSON-RPC API and stores in Supabase with embeddings
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
