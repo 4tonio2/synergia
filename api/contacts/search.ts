@@ -219,7 +219,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         parsedMatch = JSON.parse(agentText);
       } catch {
-        parsedMatch = { raw: agentText };
+        // Le webhook retourne du texte formaté, pas du JSON
+        // Format: "Information 1:\n - nom_complet: ...\n - tel: ...\n\nInformation 2:\n..."
+        console.log('[CONTACTS] Parsing text response:', agentText.substring(0, 200));
+        
+        // Parser le texte formaté
+        const parsedPersons: any[] = [];
+        
+        // Séparer par "Information X:" en utilisant une regex
+        const infoBlocks = agentText.split(/Information\s+\d+\s*:/i).filter((b: string) => b.trim());
+        
+        for (const block of infoBlocks) {
+          const personData: any = {};
+          // Séparer par les vrais retours à la ligne (pas les \n littéraux)
+          // Le texte peut contenir soit de vrais \n soit le texte littéral "\n"
+          const lines = block
+            .replace(/\\n/g, '\n')  // Convertir les \n littéraux en vrais retours à la ligne
+            .split('\n')
+            .map((l: string) => l.trim())
+            .filter((l: string) => l.length > 0);
+          
+          for (const line of lines) {
+            // Format: "- clé: valeur" ou "clé: valeur"
+            const match = line.match(/^\s*-?\s*([^:]+):\s*(.*)$/);
+            if (match) {
+              const key = match[1].trim().toLowerCase().replace(/\s+/g, '_');
+              const value = match[2].trim();
+              if (value) {
+                personData[key] = value;
+              }
+            }
+          }
+          
+          if (Object.keys(personData).length > 0) {
+            parsedPersons.push(personData);
+          }
+        }
+        
+        if (parsedPersons.length > 0) {
+          // Si on a parsé plusieurs personnes, on les retourne toutes
+          parsedMatch = parsedPersons.length === 1 ? parsedPersons[0] : { persons: parsedPersons, raw: agentText };
+        } else {
+          // Si le parsing a échoué, garder le texte brut
+          parsedMatch = { raw: agentText };
+        }
       }
 
       results.push({

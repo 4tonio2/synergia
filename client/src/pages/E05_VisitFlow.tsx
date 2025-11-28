@@ -565,11 +565,70 @@ export default function E05_VisitFlow() {
 
                 const info = match.Information || match.information || match;
                 
+                // Si c'est un texte brut (raw), l'afficher directement avec le bon formatage
+                if (info.raw && typeof info.raw === 'string') {
+                  // Convertir les \n littéraux en vrais retours à la ligne
+                  const formattedText = info.raw.replace(/\\n/g, '\n');
+                  
+                  return (
+                    <div
+                      key={index}
+                      className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
+                    >
+                      <p className="font-semibold text-blue-800 mb-2">
+                        Résultat de la recherche
+                      </p>
+                      <pre className="whitespace-pre-wrap bg-white p-3 rounded-lg text-xs leading-relaxed overflow-x-auto">
+                        {formattedText}
+                      </pre>
+                    </div>
+                  );
+                }
+                
+                // Si on a plusieurs personnes dans le résultat
+                if (info.persons && Array.isArray(info.persons)) {
+                  return (
+                    <div key={index} className="space-y-3">
+                      {info.persons.map((personInfo: any, pIndex: number) => {
+                        const pName = personInfo.nom_complet || personInfo.name || '';
+                        const pKeys = Object.keys(personInfo).filter(k => k !== 'raw');
+                        
+                        return (
+                          <div
+                            key={pIndex}
+                            className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
+                          >
+                            <p className="font-semibold text-blue-800">
+                              Information {pIndex + 1}{' '}
+                              {pName ? `- ${pName}` : ''}
+                            </p>
+                            <div className="mt-2 space-y-1">
+                              {pKeys.map((key) => {
+                                const value = personInfo[key];
+                                if (!value) return null;
+                                const formattedKey = key
+                                  .replace(/_/g, ' ')
+                                  .replace(/^./, str => str.toUpperCase());
+                                return (
+                                  <p key={key} className="break-words">
+                                    <span className="font-medium text-gray-600">{formattedKey} :</span>{' '}
+                                    <span>{String(value)}</span>
+                                  </p>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+                
                 // Afficher toutes les informations retournées par le webhook
                 const displayName = info.nom_complet || info.name || info.display_name || '';
                 
-                // Récupérer toutes les clés de l'objet info pour les afficher
-                const allKeys = Object.keys(info);
+                // Récupérer toutes les clés de l'objet info pour les afficher (exclure 'raw')
+                const allKeys = Object.keys(info).filter(k => k !== 'raw');
                 const hasDetails = allKeys.length > 0;
 
                 // Fonction pour formater la valeur (gérer les objets, arrays, etc.)
