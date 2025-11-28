@@ -220,12 +220,11 @@ export default function E05_VisitFlow() {
 
   const handleCreateContact = async (person: any, index: number) => {
     try {
-      const response = await fetch('/api/contacts/consent', {
+      const response = await fetch('/api/contacts/upsert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           person: person,
-          consent: 'approved',
         }),
       });
 
