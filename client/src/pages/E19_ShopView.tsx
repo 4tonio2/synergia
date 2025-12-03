@@ -91,27 +91,27 @@ const CategoryCard = ({ name, image, onClick, hasSubcategories = false }: Catego
       onClick={onClick}
       className="bg-white rounded-xl shadow-md overflow-hidden cursor-pointer transition duration-150 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
     >
-      <div className="relative h-32 bg-gradient-to-br from-blue-100 to-blue-50">
+      <div className="relative h-16 bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center p-2">
         {!imageError ? (
           <img 
             src={image} 
             alt={name}
-            className="w-full h-full object-cover"
+            className="h-12 w-12 object-contain rounded-lg"
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Package size={40} className="text-blue-400" />
+          <div className="h-12 w-12 flex items-center justify-center">
+            <Package size={24} className="text-blue-400" />
           </div>
         )}
         {hasSubcategories && (
-          <div className="absolute top-2 right-2 bg-blue-600 text-white rounded-full p-1">
-            <ChevronRight size={16} />
+          <div className="absolute top-1 right-1 bg-blue-600 text-white rounded-full p-0.5">
+            <ChevronRight size={12} />
           </div>
         )}
       </div>
-      <div className="p-3">
-        <p className="font-semibold text-gray-800 text-sm text-center line-clamp-2">{name}</p>
+      <div className="p-2">
+        <p className="font-semibold text-gray-800 text-xs text-center line-clamp-2">{name}</p>
       </div>
     </div>
   );
