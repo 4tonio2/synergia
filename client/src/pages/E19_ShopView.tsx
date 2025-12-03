@@ -91,7 +91,7 @@ const CategoryCard = ({ name, image, onClick, hasSubcategories = false }: Catego
       onClick={onClick}
       className="bg-white rounded-xl shadow-md overflow-hidden cursor-pointer transition duration-150 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
     >
-      <div className="relative h-16 bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center p-2">
+      <div className="relative h-16 bg-white flex items-center justify-center p-2">
         {!imageError ? (
           <img 
             src={image} 
