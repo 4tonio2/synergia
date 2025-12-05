@@ -58,9 +58,10 @@ export default function E05_VisitFlow() {
   const [transmissionContent, setTransmissionContent] = useState('');
   const [showTransmissionModal, setShowTransmissionModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
-  const [contactsResults, setContactsResults] = useState<
-    Array<{ input: any; match: any | null }>
-  >([]);
+  const [contactsResults, setContactsResults] = useState<any[]>([]);
+  const [clientFacture, setClientFacture] = useState<any | null>(null);
+  const [products, setProducts] = useState<any[]>([]);
+  const [rendezVous, setRendezVous] = useState<any[]>([]);
   
   // État pour l'édition des contacts
   const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
@@ -195,6 +196,9 @@ export default function E05_VisitFlow() {
 
     setIsSearchingContacts(true);
     setContactsResults([]);
+    setClientFacture(null);
+    setProducts([]);
+    setRendezVous([]);
 
     try {
       const response = await fetch('/api/contacts/search', {
@@ -209,14 +213,25 @@ export default function E05_VisitFlow() {
 
       const data = await response.json();
       const persons = Array.isArray(data.persons) ? data.persons : [];
-      setContactsResults(persons);
+      const client = data.client_facture || null;
+      const prods = Array.isArray(data.products) ? data.products : [];
+      const rdvs = Array.isArray(data.rendez_vous) ? data.rendez_vous : [];
 
-      if (!persons.length) {
-        toast.info('Aucun contact détecté dans la transcription');
+      setContactsResults(persons);
+      setClientFacture(client);
+      setProducts(prods);
+      setRendezVous(rdvs);
+
+      if (!persons.length && !client && !prods.length && !rdvs.length) {
+        toast.info('Aucune entité détectée dans la transcription');
+      } else {
+        toast.success(
+          `Extraction réussie: ${persons.length} contacts, ${prods.length} produits, ${rdvs.length} RDV`
+        );
       }
     } catch (error) {
-      console.error('[CONTACTS] Erreur recherche contacts:', error);
-      toast.error('Erreur lors de la recherche de contacts dans Odoo');
+      console.error('[EXTRACT-ENTITIES] Erreur extraction:', error);
+      toast.error('Erreur lors de l\'extraction des entités');
     } finally {
       setIsSearchingContacts(false);
     }
@@ -243,40 +258,10 @@ export default function E05_VisitFlow() {
   const handleSaveEditContact = (index: number) => {
     setContactsResults(prev => {
       const newResults = [...prev];
-      const currentItem = newResults[index];
-      
-      if (currentItem.match) {
-        // Mettre à jour le match avec les nouvelles données
-        const info = currentItem.match.Information || currentItem.match.information || currentItem.match;
-        const updatedInfo = { ...info, ...editingContactData };
-        
-        if (currentItem.match.Information) {
-          newResults[index] = {
-            ...currentItem,
-            match: { ...currentItem.match, Information: updatedInfo }
-          };
-        } else if (currentItem.match.information) {
-          newResults[index] = {
-            ...currentItem,
-            match: { ...currentItem.match, information: updatedInfo }
-          };
-        } else {
-          newResults[index] = {
-            ...currentItem,
-            match: updatedInfo
-          };
-        }
-      } else {
-        // Mettre à jour l'input si pas de match
-        newResults[index] = {
-          ...currentItem,
-          input: { ...currentItem.input, ...editingContactData }
-        };
-      }
-      
+      newResults[index] = { ...newResults[index], ...editingContactData };
       return newResults;
     });
-    
+
     setEditingContactIndex(null);
     setEditingContactData({});
     toast.success('Contact modifié avec succès');
@@ -591,7 +576,7 @@ export default function E05_VisitFlow() {
             {isSearchingContacts ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Recherche des contacts Odoo...
+                Extraction en cours...
               </>
             ) : (
               <>
@@ -602,118 +587,186 @@ export default function E05_VisitFlow() {
           </Button>
         </div>
 
+        {/* Loader overlay pendant l'extraction */}
+        {isSearchingContacts && (
+          <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="relative">
+                <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Extraction des entités en cours...
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Recherche des contacts, produits et rendez-vous dans vos notes
+                </p>
+
+                <div className="flex flex-wrap justify-center gap-2 pt-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Contacts
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Produits
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Rendez-vous
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Client Facturé */}
+        {clientFacture && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">Client à facturer</h3>
+            <div className={`border rounded-xl p-3 text-sm ${
+              clientFacture.reconnu ? 'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'
+            }`}>
+              <div className="flex justify-between items-start mb-2">
+                <p className={`font-semibold ${
+                  clientFacture.reconnu ? 'text-green-800' : 'text-orange-800'
+                }`}>
+                  {clientFacture.nom_complet || 'Client non identifié'}
+                  {clientFacture.reconnu && ' ✓'}
+                </p>
+                {clientFacture.odoo_contact_id && (
+                  <span className="text-xs bg-white px-2 py-1 rounded">
+                    ID: {clientFacture.odoo_contact_id}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1 text-gray-700">
+                {clientFacture.tel && (
+                  <p><span className="font-medium">Tél:</span> {clientFacture.tel}</p>
+                )}
+                {clientFacture.email && (
+                  <p><span className="font-medium">Email:</span> {clientFacture.email}</p>
+                )}
+                {!clientFacture.reconnu && (
+                  <p className="text-orange-700 text-xs mt-2">
+                    ⚠️ Client non reconnu dans Odoo - Vérifiez les informations avant de créer
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Produits */}
+        {products.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Produits détectés ({products.length})
+            </h3>
+            <div className="space-y-2">
+              {products.map((product, index) => (
+                <div
+                  key={index}
+                  className="border border-blue-200 bg-blue-50 rounded-xl p-3 text-sm"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <p className="font-semibold text-blue-800">
+                        {product.nom_produit || 'Produit sans nom'}
+                      </p>
+                      <div className="mt-1 space-y-1 text-gray-700">
+                        {product.quantite && (
+                          <p>
+                            <span className="font-medium">Quantité:</span> {product.quantite}
+                            {product.unite && ` ${product.unite}`}
+                          </p>
+                        )}
+                        {product.prix_unitaire && (
+                          <p>
+                            <span className="font-medium">Prix unitaire:</span> {product.prix_unitaire}€
+                          </p>
+                        )}
+                        {product.description && (
+                          <p className="text-xs text-gray-600 italic">
+                            {product.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Rendez-vous */}
+        {rendezVous.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Rendez-vous détectés ({rendezVous.length})
+            </h3>
+            <div className="space-y-2">
+              {rendezVous.map((rdv, index) => (
+                <div
+                  key={index}
+                  className="border border-purple-200 bg-purple-50 rounded-xl p-3 text-sm"
+                >
+                  <p className="font-semibold text-purple-800">
+                    RDV {index + 1}
+                  </p>
+                  <div className="mt-1 space-y-1 text-gray-700">
+                    {rdv.date && (
+                      <p>
+                        <span className="font-medium">Date:</span> {rdv.date}
+                      </p>
+                    )}
+                    {rdv.heure && (
+                      <p>
+                        <span className="font-medium">Heure:</span> {rdv.heure}
+                      </p>
+                    )}
+                    {rdv.description && (
+                      <p className="text-xs text-gray-600">
+                        {rdv.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Contacts/Personnes */}
         {contactsResults.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-700">
-              Résultats contacts Odoo
+              Contacts détectés ({contactsResults.length})
             </h3>
             <div className="space-y-3">
-              {contactsResults.map((item, index) => {
-                const match = item.match;
-                const input = item.input || {};
+              {contactsResults.map((person, index) => {
                 const isEditing = editingContactIndex === index;
+                const reconnu = person.reconnu === true;
 
-                if (!match) {
-                  // Mode édition pour contact non trouvé
-                  if (isEditing) {
-                    return (
-                      <div
-                        key={index}
-                        className="border border-orange-200 bg-orange-50 rounded-xl p-3 text-sm"
-                      >
-                        <div className="flex justify-between items-center mb-3">
-                          <p className="font-semibold text-orange-800">
-                            Modifier le contact
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleSaveEditContact(index)}
-                              className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg"
-                              title="Enregistrer"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={handleCancelEditContact}
-                              className="p-1.5 bg-gray-400 hover:bg-gray-500 text-white rounded-lg"
-                              title="Annuler"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          {Object.keys(editingContactData).map((key) => (
-                            <div key={key} className="flex gap-2 items-center">
-                              <label className="w-1/3 text-xs font-medium text-gray-600 capitalize">
-                                {key.replace(/_/g, ' ')}
-                              </label>
-                              <Input
-                                value={editingContactData[key]}
-                                onChange={(e) => handleEditFieldChange(key, e.target.value)}
-                                className="flex-1 text-sm h-8"
-                              />
-                            </div>
-                          ))}
-                          <button
-                            onClick={handleAddField}
-                            className="text-xs text-blue-600 hover:text-blue-800 underline"
-                          >
-                            + Ajouter un champ
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={index}
-                      className="border border-orange-200 bg-orange-50 rounded-xl p-3 text-sm"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold text-orange-800">
-                            Personne {index + 1}{' '}
-                            {input.nom_complet ? `- ${input.nom_complet}` : ''}
-                          </p>
-                          <p className="text-gray-600 mt-1">
-                            Aucun contact correspondant trouvé dans Odoo.
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleStartEditContact(index, input)}
-                          className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
-                          title="Modifier"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      </div>
-                      {input.nom_complet && (
-                        <div className="mt-3">
-                          <button
-                            onClick={() => handleCreateContact(input, index)}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                          >
-                            ✅ Créer ce nouveau contact dans Odoo
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                const info = match.Information || match.information || match;
-                
-                // Mode édition pour contact trouvé
+                // Mode édition
                 if (isEditing) {
                   return (
                     <div
                       key={index}
-                      className="border border-blue-200 bg-blue-50 rounded-xl p-3 text-sm"
+                      className={`border rounded-xl p-3 text-sm ${
+                        reconnu ? 'border-blue-200 bg-blue-50' : 'border-orange-200 bg-orange-50'
+                      }`}
                     >
                       <div className="flex justify-between items-center mb-3">
-                        <p className="font-semibold text-blue-800">
+                        <p className={`font-semibold ${
+                          reconnu ? 'text-blue-800' : 'text-orange-800'
+                        }`}>
                           Modifier le contact
                         </p>
                         <div className="flex gap-2">
@@ -756,152 +809,81 @@ export default function E05_VisitFlow() {
                     </div>
                   );
                 }
-                
-                // Si c'est un texte brut (raw), l'afficher directement avec le bon formatage
-                if (info.raw && typeof info.raw === 'string') {
-                  // Convertir les \n littéraux en vrais retours à la ligne
-                  const formattedText = info.raw.replace(/\\n/g, '\n');
-                  
-                  return (
-                    <div
-                      key={index}
-                      className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
-                    >
-                      <p className="font-semibold text-blue-800 mb-2">
-                        Résultat de la recherche
-                      </p>
-                      <pre className="whitespace-pre-wrap bg-white p-3 rounded-lg text-xs leading-relaxed overflow-x-auto">
-                        {formattedText}
-                      </pre>
-                    </div>
-                  );
-                }
-                
-                // Si on a plusieurs personnes dans le résultat
-                if (info.persons && Array.isArray(info.persons)) {
-                  return (
-                    <div key={index} className="space-y-3">
-                      {info.persons.map((personInfo: any, pIndex: number) => {
-                        const pName = personInfo.nom_complet || personInfo.name || '';
-                        const pKeys = Object.keys(personInfo).filter(k => k !== 'raw');
-                        
-                        return (
-                          <div
-                            key={pIndex}
-                            className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
-                          >
-                            <div className="flex justify-between items-start">
-                              <p className="font-semibold text-blue-800">
-                                Information {pIndex + 1}{' '}
-                                {pName ? `- ${pName}` : ''}
-                              </p>
-                              <button
-                                onClick={() => handleStartEditContact(index, personInfo)}
-                                className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
-                                title="Modifier"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <div className="mt-2 space-y-1">
-                              {pKeys.map((key) => {
-                                const value = personInfo[key];
-                                if (!value) return null;
-                                const formattedKey = key
-                                  .replace(/_/g, ' ')
-                                  .replace(/^./, str => str.toUpperCase());
-                                return (
-                                  <p key={key} className="break-words">
-                                    <span className="font-medium text-gray-600">{formattedKey} :</span>{' '}
-                                    <span>{String(value)}</span>
-                                  </p>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                }
-                
-                // Afficher toutes les informations retournées par le webhook
-                const displayName = info.nom_complet || info.name || info.display_name || '';
-                
-                // Récupérer toutes les clés de l'objet info pour les afficher (exclure 'raw')
-                const allKeys = Object.keys(info).filter(k => k !== 'raw');
-                const hasDetails = allKeys.length > 0;
 
-                // Fonction pour formater la valeur (gérer les objets, arrays, etc.)
-                const formatValue = (value: any): string => {
-                  if (value === null || value === undefined) return '';
-                  if (typeof value === 'object') {
-                    if (Array.isArray(value)) {
-                      return value.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(', ');
-                    }
-                    return JSON.stringify(value, null, 2);
-                  }
-                  return String(value);
-                };
-
-                // Fonction pour formater le nom de la clé
-                const formatKey = (key: string): string => {
-                  return key
-                    .replace(/_/g, ' ')
-                    .replace(/([A-Z])/g, ' $1')
-                    .replace(/^./, str => str.toUpperCase())
-                    .trim();
-                };
-
+                // Affichage normal du contact
                 return (
                   <div
                     key={index}
-                    className="border border-blue-100 bg-blue-50 rounded-xl p-3 text-sm text-gray-700"
+                    className={`border rounded-xl p-3 text-sm ${
+                      reconnu ? 'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'
+                    }`}
                   >
-                    <div className="flex justify-between items-start">
-                      <p className="font-semibold text-blue-800">
-                        Personne {index + 1}{' '}
-                        {displayName ? `- ${displayName}` : ''}
+                    <div className="flex justify-between items-start mb-2">
+                      <p className={`font-semibold ${
+                        reconnu ? 'text-green-800' : 'text-orange-800'
+                      }`}>
+                        {person.nom_complet || 'Contact sans nom'}
+                        {reconnu && ' ✓'}
                       </p>
-                      <button
-                        onClick={() => handleStartEditContact(index, info)}
-                        className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
-                        title="Modifier"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-2">
+                        {person.odoo_contact_id && (
+                          <span className="text-xs bg-white px-2 py-1 rounded">
+                            ID: {person.odoo_contact_id}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleStartEditContact(index, person)}
+                          className="p-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
+                          title="Modifier"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="mt-2 space-y-1">
-                      {hasDetails ? (
-                        allKeys.map((key) => {
-                          const value = info[key];
-                          const formattedValue = formatValue(value);
-                          
-                          // Ne pas afficher les valeurs vides
-                          if (!formattedValue || formattedValue === '""' || formattedValue === 'null') {
-                            return null;
-                          }
-                          
-                          return (
-                            <p key={key} className="break-words">
-                              <span className="font-medium text-gray-600">{formatKey(key)} :</span>{' '}
-                              {typeof value === 'object' ? (
-                                <pre className="mt-1 p-2 bg-white rounded text-xs overflow-x-auto whitespace-pre-wrap">
-                                  {formattedValue}
-                                </pre>
-                              ) : (
-                                <span>{formattedValue}</span>
-                              )}
-                            </p>
-                          );
-                        })
-                      ) : (
-                        <p className="text-gray-500">
-                          Contact trouvé, mais aucune information détaillée
-                          n&apos;a été renvoyée.
+
+                    <div className="space-y-1 text-gray-700 text-xs">
+                      {person.role_brut && (
+                        <p><span className="font-medium">Rôle:</span> {person.role_brut}</p>
+                      )}
+                      {person.tel && (
+                        <p><span className="font-medium">Tél:</span> {person.tel}</p>
+                      )}
+                      {person.email && (
+                        <p><span className="font-medium">Email:</span> {person.email}</p>
+                      )}
+                      {person.type_acteur && (
+                        <p><span className="font-medium">Type:</span> {person.type_acteur}</p>
+                      )}
+                      {person.profession_code && (
+                        <p><span className="font-medium">Profession:</span> {person.profession_code}</p>
+                      )}
+                      {person.is_professional !== undefined && (
+                        <p>
+                          <span className="font-medium">Professionnel:</span>{' '}
+                          {person.is_professional ? 'Oui' : 'Non'}
                         </p>
                       )}
+                      {person.is_client !== undefined && (
+                        <p>
+                          <span className="font-medium">Client:</span>{' '}
+                          {person.is_client ? 'Oui' : 'Non'}
+                        </p>
+                      )}
+                      {person.source && (
+                        <p><span className="font-medium">Source:</span> {person.source}</p>
+                      )}
                     </div>
+
+                    {!reconnu && person.nom_complet && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => handleCreateContact(person, index)}
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-xs"
+                        >
+                          ✅ Créer ce nouveau contact dans Odoo
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

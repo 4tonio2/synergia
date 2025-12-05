@@ -724,17 +724,18 @@ Génère une transmission médicale structurée pour le médecin traitant.`
 
   /**
    * POST /api/contacts/search
-   * Orchestrate n8n workflows to search contacts in Odoo based on visit notes.
+   * Call unified n8n workflow to extract and search contacts, products, and appointments in Odoo.
    *
    * Expected body:
    * { text: string }
    *
-   * Assumes the first webhook (extract-contacts) returns JSON:
-   * { persons: Array<{ nom_complet?: string; tel?: string; email?: string; profession_code?: string;
-   *                    type_acteur?: string; grande_categorie_acteur?: string; sous_categorie_acteur?: string; }> }
-   *
-   * The second webhook (Agent-contacts) is called once per person with at least one non-empty field.
-   * If it returns a payload containing "[NONE]", we consider that no contact was found.
+   * Expected response from n8n:
+   * {
+   *   client_facture: { nom_complet, tel, email, reconnu, odoo_contact_id },
+   *   persons: [{ nom_complet, tel, email, role_brut, is_professional, reconnu, odoo_contact_id, source, ... }],
+   *   products: [{ nom_produit, quantite, prix_unitaire, description, unite }],
+   *   rendez_vous: [{ date, heure, description, ... }]
+   * }
    */
   app.post('/api/contacts/search', async (req: Request, res: Response) => {
     try {
@@ -744,10 +745,10 @@ Génère une transmission médicale structurée pour le médecin traitant.`
         return res.status(400).json({ error: 'Le texte de visite est requis' });
       }
 
-      console.log('[CONTACTS] Calling n8n extract-contacts webhook...');
+      console.log('[EXTRACT-ENTITIES] Calling unified n8n extract-entities-v4 webhook...');
 
       const extractResponse = await fetch(
-        'https://treeporteur-n8n.fr/webhook/extract-contacts',
+        'https://treeporteur-n8n.fr/webhook/extract-entities-v4',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -757,193 +758,48 @@ Génère une transmission médicale structurée pour le médecin traitant.`
 
       if (!extractResponse.ok) {
         const body = await extractResponse.text().catch(() => '');
-        console.error('[CONTACTS] extract-contacts error:', extractResponse.status, body);
+        console.error('[EXTRACT-ENTITIES] Webhook error:', extractResponse.status, body);
         return res.status(502).json({
-          error: 'Erreur lors de la détection des personnes (extract-contacts)',
+          error: 'Erreur lors de l\'extraction des entités (extract-entities-v4)',
         });
       }
 
       const contentType = extractResponse.headers.get('content-type') || '';
 
-      let persons: any[] = [];
-
-      if (contentType.includes('application/json')) {
-        // Cas où le workflow renvoie déjà du JSON structuré
-        const extractData: any = await extractResponse.json();
-        persons =
-          extractData.persons ||
-          extractData.Personnes ||
-          extractData.contacts ||
-          [];
-      } else {
-        // Cas actuel : réponse texte au format:
-        // Personne 1:
-        // - nom_complet: ...
-        // - tel: ...
-        // ...
-        const raw = await extractResponse.text();
-        console.log(
-          '[CONTACTS] Text response from extract-contacts, attempting to parse:',
-        );
-        console.log(raw);
-
-        const blocks = raw
-          .split(/Personne\s+\d+\s*:/i)
-          .map((b) => b.trim())
-          .filter((b) => b.length > 0);
-
-        persons = blocks.map((block) => {
-          const person: any = {};
-          const lines = block.split('\n');
-
-          for (const line of lines) {
-            const match = line.match(/^\s*-\s*([^:]+):\s*(.*)$/);
-            if (!match) continue;
-
-            const rawKey = match[1].trim();
-            const value = match[2].trim();
-
-            // Normaliser les clés vers le format attendu
-            const key = rawKey
-              .toLowerCase()
-              .replace(/\s+/g, '_')
-              .replace(/[^\w_]/g, '');
-
-            switch (key) {
-              case 'nom_complet':
-              case 'tel':
-              case 'email':
-              case 'profession_code':
-              case 'type_acteur':
-              case 'grande_categorie_acteur':
-              case 'sous_categorie_acteur':
-                person[key] = value;
-                break;
-              default:
-                // On garde quand même au cas où
-                person[key] = value;
-            }
-          }
-
-          return person;
+      if (!contentType.includes('application/json')) {
+        const body = await extractResponse.text().catch(() => '');
+        console.error('[EXTRACT-ENTITIES] Expected JSON response but got:', contentType, body.substring(0, 200));
+        return res.status(502).json({
+          error: 'Le webhook n8n n\'a pas retourné une réponse JSON valide',
         });
       }
 
-      if (!Array.isArray(persons) || persons.length === 0) {
-        console.log('[CONTACTS] No persons detected by extract-contacts');
-        return res.json({ persons: [] });
-      }
+      const data: any = await extractResponse.json();
 
-      const fields = [
-        'nom_complet',
-        'tel',
-        'email',
-        'profession_code',
-        'type_acteur',
-        'grande_categorie_acteur',
-        'sous_categorie_acteur',
-      ];
+      // Structure attendue: { client_facture, persons, products, rendez_vous }
+      const client_facture = data.client_facture || null;
+      const persons = Array.isArray(data.persons) ? data.persons : [];
+      const products = Array.isArray(data.products) ? data.products : [];
+      const rendez_vous = Array.isArray(data.rendez_vous) ? data.rendez_vous : [];
 
-      const results: Array<{
-        input: any;
-        match: any | null;
-        requiresConsent?: boolean;
-        consentAction?: string;
-      }> = [];
+      console.log('[EXTRACT-ENTITIES] Extraction réussie:', {
+        client_facture: client_facture?.nom_complet || 'N/A',
+        persons_count: persons.length,
+        products_count: products.length,
+        rendez_vous_count: rendez_vous.length,
+      });
 
-      for (const person of persons) {
-        const hasAnyField = fields.some((key) => {
-          const value = person?.[key];
-          return typeof value === 'string' ? value.trim().length > 0 : !!value;
-        });
-
-        if (!hasAnyField) {
-          results.push({
-            input: person,
-            match: null,
-          });
-          continue;
-        }
-
-        console.log(
-          '[CONTACTS] Calling n8n Agent-contacts for person:',
-          person?.nom_complet || '(sans nom)',
-        );
-
-        // Construire une userQuery textuelle à partir des champs de la personne
-        const personLines: string[] = [];
-        if (person.nom_complet) personLines.push(`nom_complet: ${person.nom_complet}`);
-        if (person.tel) personLines.push(`tel: ${person.tel}`);
-        if (person.email) personLines.push(`email: ${person.email}`);
-        if (person.profession_code) personLines.push(`profession_code: ${person.profession_code}`);
-        if (person.type_acteur) personLines.push(`type_acteur: ${person.type_acteur}`);
-        if (person.grande_categorie_acteur) {
-          personLines.push(
-            `grande_categorie_acteur: ${person.grande_categorie_acteur}`,
-          );
-        }
-        if (person.sous_categorie_acteur) {
-          personLines.push(`sous_categorie_acteur: ${person.sous_categorie_acteur}`);
-        }
-
-        const agentPayload = {
-          userQuery:
-            personLines.length > 0
-              ? personLines.join('\n')
-              : JSON.stringify(person),
-        };
-
-        const agentResponse = await fetch(
-          'https://treeporteur-n8n.fr/webhook/Agent-contacts',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(agentPayload),
-          },
-        );
-
-        if (!agentResponse.ok) {
-          const body = await agentResponse.text().catch(() => '');
-          console.error('[CONTACTS] Agent-contacts error:', agentResponse.status, body);
-          results.push({
-            input: person,
-            match: null,
-          });
-          continue;
-        }
-
-        const agentText = await agentResponse.text();
-
-        if (agentText.includes('[NONE]')) {
-          // Match is null - require user consent before upserting
-          console.log('[CONTACTS] No match found for person:', person?.nom_complet);
-          results.push({
-            input: person,
-            match: null,
-            requiresConsent: true,
-            consentAction: 'pending', // pending | approved | rejected
-          });
-          continue;
-        }
-
-        let parsedMatch: any = null;
-        try {
-          parsedMatch = JSON.parse(agentText);
-        } catch {
-          parsedMatch = { raw: agentText };
-        }
-
-        results.push({
-          input: person,
-          match: parsedMatch,
-        });
-      }
-
-      res.json({ persons: results });
+      // Retourner la structure complète
+      res.json({
+        client_facture,
+        persons,
+        products,
+        rendez_vous,
+      });
     } catch (error: any) {
-      console.error('[CONTACTS] Unexpected error:', error);
+      console.error('[EXTRACT-ENTITIES] Unexpected error:', error);
       res.status(500).json({
-        error: 'Erreur interne lors de la recherche de contacts',
+        error: 'Erreur interne lors de l\'extraction des entités',
         details: error.message,
       });
     }
