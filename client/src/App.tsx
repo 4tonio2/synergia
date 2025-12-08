@@ -181,10 +181,14 @@ function App() {
       <ConfirmDialogProvider>
         <AppProvider>
           <TooltipProvider>
-            {/* Container centré comme sur mobile */}
-            <div className="mx-auto max-w-md min-h-screen bg-white shadow-xl">
+            {/* Container centré comme sur mobile - hauteur fixe à 100vh, pas de scroll navigateur */}
+            <div className="mx-auto max-w-md h-screen bg-white shadow-xl flex flex-col overflow-hidden">
               <Toaster />
-              <Router />
+              {/* Zone de contenu scrollable */}
+              <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                <Router />
+              </div>
+              {/* Navbar fixe en bas */}
               <GlobalNavigation />
             </div>
           </TooltipProvider>

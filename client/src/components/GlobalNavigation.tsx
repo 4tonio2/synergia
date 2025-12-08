@@ -54,57 +54,52 @@ export function GlobalNavigation() {
   };
 
   return (
-    <>
-      {/* Spacer pour éviter que le contenu soit caché par la navbar */}
-      <div className="h-20" />
+    /* Navigation Footer - Dans le flux flex, pas fixed */
+    <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-lg">
+      <div className="flex items-center justify-around py-2 pt-3">
+        {/* Tournée */}
+        <NavItem 
+          icon={Calendar} 
+          label="Tournée" 
+          active={isActive('/dashboard')} 
+          onClick={() => handleNavigate('/dashboard')} 
+        />
+        
+        {/* Enregistrements */}
+        <NavItem 
+          icon={Volume2} 
+          label="Historique" 
+          active={isActive('/recordings')} 
+          onClick={() => handleNavigate('/recordings')} 
+        />
 
-      {/* Navigation Footer - Fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 max-w-md mx-auto w-full bg-white border-t border-gray-200 shadow-lg">
-        <div className="flex items-center justify-around py-2">
-          {/* Tournée */}
-          <NavItem 
-            icon={Calendar} 
-            label="Tournée" 
-            active={isActive('/dashboard')} 
-            onClick={() => handleNavigate('/dashboard')} 
-          />
-          
-          {/* Enregistrements */}
-          <NavItem 
-            icon={Volume2} 
-            label="Historique" 
-            active={isActive('/recordings')} 
-            onClick={() => handleNavigate('/recordings')} 
-          />
+        {/* Bouton Enregistrer - Au centre, plus visible */}
+        <button
+          onClick={handleStartFreeRecording}
+          className="flex flex-col items-center justify-center px-3 py-1 -mt-4 transition-all"
+        >
+          <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-full shadow-lg transition-all duration-200 hover:scale-105 active:scale-95">
+            <Mic className="w-6 h-6 text-white" />
+          </div>
+          <span className="text-xs font-bold text-green-600 mt-1">Enregistrer</span>
+        </button>
 
-          {/* Bouton Enregistrer - Au centre, plus visible */}
-          <button
-            onClick={handleStartFreeRecording}
-            className="flex flex-col items-center justify-center px-3 py-1 -mt-6 transition-all"
-          >
-            <div className="flex items-center justify-center w-14 h-14 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-full shadow-lg transition-all duration-200 hover:scale-105 active:scale-95">
-              <Mic className="w-7 h-7 text-white" />
-            </div>
-            <span className="text-xs font-bold text-green-600 mt-1">Enregistrer</span>
-          </button>
+        {/* Paramètres */}
+        <NavItem 
+          icon={Settings} 
+          label="Paramètres" 
+          active={isActive('/settings')} 
+          onClick={() => handleNavigate('/settings')} 
+        />
 
-          {/* Paramètres */}
-          <NavItem 
-            icon={Settings} 
-            label="Paramètres" 
-            active={isActive('/settings')} 
-            onClick={() => handleNavigate('/settings')} 
-          />
-
-          {/* Shop */}
-          <NavItem 
-            icon={ShoppingCart} 
-            label="Shop" 
-            active={isActive('/shop')} 
-            onClick={() => handleNavigate('/shop')} 
-          />
-        </div>
+        {/* Shop */}
+        <NavItem 
+          icon={ShoppingCart} 
+          label="Shop" 
+          active={isActive('/shop')} 
+          onClick={() => handleNavigate('/shop')} 
+        />
       </div>
-    </>
+    </div>
   );
 }
