@@ -34,9 +34,42 @@ interface VisitCardProps {
   age: number;
   address: string;
   risk: 'faible' | 'modéré';
+  presenceStatus: 'confirmed' | 'absent' | 'pending';
 }
 
-const VisitCard = ({ time, patientName, age, address, risk }: VisitCardProps) => {
+const PresenceStatusBadge = ({ status }: { status: 'confirmed' | 'absent' | 'pending' }) => {
+  const statusConfig = {
+    confirmed: {
+      label: 'Confirmé',
+      bgColor: 'bg-green-100',
+      textColor: 'text-green-700',
+      dotColor: 'bg-green-500',
+    },
+    absent: {
+      label: 'Absent',
+      bgColor: 'bg-red-100',
+      textColor: 'text-red-700',
+      dotColor: 'bg-red-500',
+    },
+    pending: {
+      label: 'En attente...',
+      bgColor: 'bg-gray-100',
+      textColor: 'text-gray-500',
+      dotColor: 'bg-gray-400',
+    },
+  };
+
+  const config = statusConfig[status];
+
+  return (
+    <div className={`flex items-center px-2 py-1 rounded-full ${config.bgColor}`}>
+      <div className={`w-2 h-2 rounded-full ${config.dotColor} mr-1.5`}></div>
+      <span className={`text-xs font-medium ${config.textColor}`}>{config.label}</span>
+    </div>
+  );
+};
+
+const VisitCard = ({ time, patientName, age, address, risk, presenceStatus }: VisitCardProps) => {
   const isAlert = risk === 'modéré';
   const riskColor = isAlert ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white';
   const riskDot = isAlert ? <div className="w-2 h-2 rounded-full bg-orange-500 mr-2 flex-shrink-0 animate-pulse"></div> : null;
@@ -47,9 +80,12 @@ const VisitCard = ({ time, patientName, age, address, risk }: VisitCardProps) =>
         <p className="text-lg font-bold text-gray-800">{time}</p>
       </div>
       <div className="ml-4 flex-1">
-        <div className="flex items-center">
-          {riskDot}
-          <p className="text-md font-semibold text-gray-800">{patientName}, {age} ans</p>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center">
+            {riskDot}
+            <p className="text-md font-semibold text-gray-800">{patientName}, {age} ans</p>
+          </div>
+          <PresenceStatusBadge status={presenceStatus} />
         </div>
 
         {isAlert && <p className="text-sm text-orange-600 font-medium">Risque Modéré — Confusion observée</p>}
@@ -79,10 +115,10 @@ export default function E18_TourCoordinator() {
   };
 
   const todayVisits: VisitCardProps[] = [
-    { time: '09:00', patientName: 'Françoise Dupont', age: 78, address: '12 rue des Écoles', risk: 'faible' },
-    { time: '10:00', patientName: 'Clémence Bernard', age: 85, address: '5 avenue Victor Hugo', risk: 'modéré' },
-    { time: '11:00', patientName: 'Pierre Lefèvre', age: 90, address: '33 boulevard de la Gare', risk: 'faible' },
-    { time: '14:00', patientName: 'Brigitte Marchand', age: 79, address: '17 rue Pasteur', risk: 'faible' },
+    { time: '09:00', patientName: 'Françoise Dupont', age: 78, address: '12 rue des Écoles', risk: 'faible', presenceStatus: 'confirmed' },
+    { time: '10:00', patientName: 'Clémence Bernard', age: 85, address: '5 avenue Victor Hugo', risk: 'modéré', presenceStatus: 'pending' },
+    { time: '11:00', patientName: 'Pierre Lefèvre', age: 90, address: '33 boulevard de la Gare', risk: 'faible', presenceStatus: 'absent' },
+    { time: '14:00', patientName: 'Brigitte Marchand', age: 79, address: '17 rue Pasteur', risk: 'faible', presenceStatus: 'confirmed' },
   ];
 
   const handleBack = () => {
