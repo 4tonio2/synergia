@@ -104,9 +104,9 @@ export default function E18_TourCoordinator() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col min-h-full bg-gray-50">
       {/* Header */}
-      <div className="flex items-center p-4 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
+      <div className="flex items-center p-4 border-b border-gray-200 bg-white shadow-sm">
         <button 
           onClick={handleBack} 
           className="text-gray-600 hover:text-gray-800 mr-4 transition"
@@ -120,7 +120,7 @@ export default function E18_TourCoordinator() {
         <CalendarCheck size={24} className="text-blue-600" />
       </div>
 
-      <div className="p-4 flex-1 overflow-y-auto pb-6">
+      <div className="p-4 flex-1 pb-4">
         {/* Alerte Prioritaire (Rouge) */}
         <div className="mb-6">
           <h2 className="text-lg font-bold text-red-600 mb-3 flex items-center">

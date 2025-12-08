@@ -82,7 +82,7 @@ export default function E16_OfflineMode() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 items-center justify-center p-6">
+    <div className="flex flex-col min-h-full bg-gradient-to-br from-gray-50 to-gray-100 items-center justify-center p-6">
       <div className="w-full max-w-sm">
         {/* Card principale */}
         <div className="bg-white rounded-2xl shadow-2xl p-8 mb-6">

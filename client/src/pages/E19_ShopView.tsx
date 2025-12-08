@@ -211,9 +211,9 @@ export default function E19_ShopView() {
   ) || [];
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col min-h-full bg-gray-50">
       {/* Header */}
-      <div className="flex items-center p-4 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
+      <div className="flex items-center p-4 border-b border-gray-200 bg-white shadow-sm">
         <button 
           onClick={handleBack} 
           className="text-gray-600 hover:text-gray-800 mr-4 transition"
@@ -241,7 +241,7 @@ export default function E19_ShopView() {
         </div>
       </div>
 
-      <div className="p-4 flex-1 overflow-y-auto pb-24">
+      <div className="p-4 flex-1 pb-4">
         {/* Barre de recherche */}
         <div className="mb-6">
           <div className="flex items-center bg-white rounded-xl shadow-sm p-3 border border-gray-200">

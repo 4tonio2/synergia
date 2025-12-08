@@ -19,7 +19,7 @@ export default function E03_PatientSheet() {
 
   if (!patient) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center min-h-full">
         <p className="text-gray-500">Patient non trouvé</p>
         <Button onClick={() => setLocation('/dashboard')} className="mt-4">
           Retour au Dashboard
@@ -65,10 +65,10 @@ export default function E03_PatientSheet() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col min-h-full bg-white">
       <PatientHeader patient={patient as any} onBack={handleBack} />
       
-      <div className="p-4 flex-1 overflow-y-auto pb-20">
+      <div className="p-4 flex-1 pb-4">
         {/* Tags médicaux */}
         {patient.tags && patient.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">

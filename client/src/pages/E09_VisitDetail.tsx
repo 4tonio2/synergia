@@ -25,7 +25,7 @@ export default function E09_VisitDetail() {
 
   if (!visit) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center min-h-full">
         <p className="text-gray-500">Visite non trouvée</p>
         <Button onClick={() => setLocation('/dashboard')} className="mt-4">
           Retour au Dashboard
@@ -68,10 +68,10 @@ export default function E09_VisitDetail() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col min-h-full bg-gray-50">
       <PatientHeader patient={displayPatient as any} onBack={handleBack} />
       
-      <div className="p-4 flex-1 overflow-y-auto pb-20">
+      <div className="p-4 flex-1 pb-4">
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-800">Détail de la Visite</h2>
           {visit.validated ? (

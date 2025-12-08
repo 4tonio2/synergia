@@ -40,10 +40,10 @@ export default function E04_Consent() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col min-h-full bg-white">
       <PatientHeader patient={patient as any} onBack={handleBack} />
       
-      <div className="p-6 flex-1 overflow-y-auto">
+      <div className="p-6 flex-1">
         <h2 className="text-2xl font-bold mb-4">Consentement</h2>
         <p className="text-gray-600 mb-6">
           Vous pouvez enregistrer les conversations lors des visites de patients. 

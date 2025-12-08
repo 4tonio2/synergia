@@ -45,8 +45,8 @@ export default function E02_Dashboard() {
   const unreadAlertsCount = alerts.filter(a => !a.read).length;
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      <div className="flex-1 overflow-y-auto pb-20">
+    <div className="flex flex-col min-h-full bg-gray-50">
+      <div className="flex-1 pb-4">
         <div className="p-6">
           <h1 className="text-3xl font-extrabold mb-4">Dashboard</h1>
           

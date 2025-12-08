@@ -77,7 +77,7 @@ export default function E15_AlertsConsole() {
   const moderateRiskCount = alerts.filter(a => a.risk === 'modéré').length;
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col min-h-full bg-gray-50">
       {/* Header */}
       <div className="flex items-center p-4 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
         <button 
@@ -121,7 +121,7 @@ export default function E15_AlertsConsole() {
       </div>
 
       {/* Liste des alertes */}
-      <div className="p-4 flex-1 overflow-y-auto pb-6">
+      <div className="p-4 flex-1 pb-6">
         {alerts.length === 0 ? (
           <div className="text-center p-8 bg-white rounded-xl shadow-md text-gray-500">
             <ShieldCheck size={48} className="mx-auto mb-4 text-green-400" />

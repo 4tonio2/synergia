@@ -81,7 +81,7 @@ export default function E05_RecordingSimple() {
   const displayPatient = patient || { id: 'free', name: 'Visite Libre', age: 'N/A' };
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col min-h-full bg-white">
       <PatientHeader patient={displayPatient} onBack={handleBack} />
       
       <div className="flex flex-col flex-1 justify-between items-center text-center p-6">

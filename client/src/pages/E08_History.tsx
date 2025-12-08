@@ -18,7 +18,7 @@ export default function E08_History() {
 
   if (!patient) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center min-h-full">
         <p className="text-gray-500">Patient non trouvé</p>
         <Button onClick={() => setLocation('/dashboard')} className="mt-4">
           Retour au Dashboard
@@ -36,10 +36,10 @@ export default function E08_History() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col min-h-full bg-gray-50">
       <PatientHeader patient={patient as any} onBack={handleBack} />
       
-      <div className="p-4 flex-1 overflow-y-auto pb-20">
+      <div className="p-4 flex-1 pb-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">Historique des visites</h2>
           <Button variant="ghost" className="text-sm py-1 px-3">

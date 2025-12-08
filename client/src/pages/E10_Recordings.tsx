@@ -48,7 +48,7 @@ export default function E10_Recordings() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col min-h-full bg-white">
       {/* Sticky Header with Return Button */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
         <div className="p-4 flex items-center justify-between">

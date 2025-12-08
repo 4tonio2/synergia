@@ -72,7 +72,7 @@ export default function E11_SettingsProfile() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col min-h-full bg-gray-50">
       {/* Header */}
       <div className="flex items-center p-4 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
         <button 
@@ -84,7 +84,7 @@ export default function E11_SettingsProfile() {
         <h1 className="text-2xl font-bold text-gray-800">Paramètres</h1>
       </div>
 
-      <div className="p-4 flex-1 overflow-y-auto pb-6">
+      <div className="p-4 flex-1 pb-6">
         {/* Section Profil */}
         <div className="bg-white rounded-xl shadow-md mb-6 p-4">
           <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center">
