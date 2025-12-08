@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppProvider } from "@/lib/appStore";
 import { ConfirmDialogProvider } from "@/hooks/useConfirmDialog";
+import { GlobalNavigation } from "@/components/GlobalNavigation";
 import Landing from "@/pages/landing";
 import E02_Dashboard from "@/pages/E02_Dashboard";
 import E03_PatientSheet from "@/pages/E03_PatientSheet";
@@ -184,6 +185,7 @@ function App() {
             <div className="mx-auto max-w-md min-h-screen bg-white shadow-xl">
               <Toaster />
               <Router />
+              <GlobalNavigation />
             </div>
           </TooltipProvider>
         </AppProvider>

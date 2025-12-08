@@ -1,10 +1,8 @@
 import { useLocation } from "wouter";
-import { Calendar, Settings, Mic, Volume2, Stethoscope, Truck, ShoppingCart } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Stethoscope, Truck, ShoppingCart } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/lib/appStore";
 import { PatientCard } from "@/components/PatientCard";
-import { NavItem } from "@/components/NavItem";
 import { useCustomToast } from "@/hooks/useToast";
 
 export default function E02_Dashboard() {
@@ -32,10 +30,6 @@ export default function E02_Dashboard() {
 
   const handleSelectPatient = (patient: any) => {
     setLocation(`/patients/${patient.id}`);
-  };
-
-  const handleStartFreeRecording = () => {
-    setLocation('/recordings/new-free');
   };
 
   const handleNavigate = (path: string) => {
@@ -91,15 +85,6 @@ export default function E02_Dashboard() {
               ))}
             </div>
           </div>
-          
-          {/* Enregistrer maintenant (sans patient) */}
-          <Button 
-            className="w-full mb-6 bg-green-600 hover:bg-green-700 shadow-lg h-14 text-lg font-semibold"
-            onClick={handleStartFreeRecording}
-          >
-            <Mic className="mr-2" size={20} />
-            Enregistrer maintenant (sans patient)
-          </Button>
 
           {/* Widget statistiques */}
           <div className="grid grid-cols-2 gap-4 mb-6">
@@ -162,29 +147,6 @@ export default function E02_Dashboard() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Navigation Footer - Fixed at bottom */}
-      {/* Bottom Nav - 3 boutons */}
-      <div className="flex justify-around p-3 bg-white border-t border-gray-200 fixed bottom-0 left-0 right-0 z-10 max-w-md mx-auto w-full shadow-lg">
-        <NavItem 
-          icon={Calendar} 
-          label="Tournée" 
-          active={true} 
-          onClick={() => handleNavigate('/dashboard')} 
-        />
-        <NavItem 
-          icon={Volume2} 
-          label="Enregistrements" 
-          active={false} 
-          onClick={() => handleNavigate('/recordings')} 
-        />
-        <NavItem 
-          icon={Settings} 
-          label="Paramètres" 
-          active={false} 
-          onClick={() => handleNavigate('/settings')} 
-        />
       </div>
     </div>
   );
