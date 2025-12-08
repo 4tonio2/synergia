@@ -72,30 +72,40 @@ const PresenceStatusBadge = ({ status }: { status: 'confirmed' | 'absent' | 'pen
 const VisitCard = ({ time, patientName, age, address, risk, presenceStatus }: VisitCardProps) => {
   const isAlert = risk === 'modéré';
   const riskColor = isAlert ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white';
-  const riskDot = isAlert ? <div className="w-2 h-2 rounded-full bg-orange-500 mr-2 flex-shrink-0 animate-pulse"></div> : null;
 
   return (
-    <div className={`flex items-start p-4 mb-3 rounded-xl shadow-sm border-l-4 ${riskColor} transition duration-150 hover:shadow-md cursor-pointer`}>
-      <div className="flex-shrink-0 w-16 text-center pt-1">
-        <p className="text-lg font-bold text-gray-800">{time}</p>
-      </div>
-      <div className="ml-4 flex-1">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center">
-            {riskDot}
-            <p className="text-md font-semibold text-gray-800">{patientName}, {age} ans</p>
-          </div>
-          <PresenceStatusBadge status={presenceStatus} />
+    <div className={`p-4 mb-3 rounded-xl shadow-sm border-l-4 ${riskColor} transition duration-150 hover:shadow-md cursor-pointer`}>
+      {/* Ligne 1: Heure/Date */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center">
+          <Clock size={14} className="mr-1.5 text-blue-500" />
+          <p className="text-lg font-bold text-gray-800">{time}</p>
+          <span className="text-sm text-gray-400 ml-2">Aujourd'hui</span>
         </div>
+        <ChevronRight size={20} className="text-gray-400" />
+      </div>
 
-        {isAlert && <p className="text-sm text-orange-600 font-medium">Risque Modéré — Confusion observée</p>}
+      {/* Ligne 2: Nom, âge + Status RCS */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center">
+          {isAlert && <div className="w-2 h-2 rounded-full bg-orange-500 mr-2 flex-shrink-0 animate-pulse"></div>}
+          <p className="text-md font-semibold text-gray-800">{patientName}, {age} ans</p>
+        </div>
+        <PresenceStatusBadge status={presenceStatus} />
+      </div>
 
-        <div className="flex items-center text-sm text-gray-500 mt-1">
-          <MapPin size={14} className="mr-1 text-gray-400" />
+      {/* Ligne 3: Informations supplémentaires */}
+      <div className="pt-2 border-t border-gray-100">
+        {isAlert && (
+          <p className="text-sm text-orange-600 font-medium mb-1">
+            ⚠️ Risque Modéré — Confusion observée
+          </p>
+        )}
+        <div className="flex items-center text-sm text-gray-500">
+          <MapPin size={14} className="mr-1.5 text-gray-400" />
           <span>{address}</span>
         </div>
       </div>
-      <ChevronRight size={20} className="text-gray-400 flex-shrink-0 ml-2 mt-1" />
     </div>
   );
 };
