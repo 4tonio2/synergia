@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Calendar, Volume2, Settings, Mic } from "lucide-react";
+import { Calendar, Volume2, Settings, Mic, ShoppingCart } from "lucide-react";
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -96,8 +96,13 @@ export function GlobalNavigation() {
             onClick={() => handleNavigate('/settings')} 
           />
 
-          {/* Placeholder pour équilibrer */}
-          <div className="w-12" />
+          {/* Shop */}
+          <NavItem 
+            icon={ShoppingCart} 
+            label="Shop" 
+            active={isActive('/shop')} 
+            onClick={() => handleNavigate('/shop')} 
+          />
         </div>
       </div>
     </>

@@ -304,20 +304,20 @@ export default function E19_ShopView() {
             <p>Aucune catégorie trouvée</p>
           </div>
         )}
-      </div>
 
-      {/* CTA Panier / Commander - Fixed at bottom */}
-      <div className="p-4 bg-white border-t border-gray-200 fixed bottom-0 left-0 right-0 max-w-md mx-auto shadow-lg">
-        <Button
-          onClick={handleCheckout}
-          disabled={totalItems === 0}
-          className={`w-full flex items-center justify-center space-x-2 py-6 rounded-xl font-semibold transition duration-200 shadow-lg ${
-            totalItems > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}
-        >
-          <ShoppingCart size={20} />
-          <span>Passer la commande ({totalItems} article{totalItems > 1 ? 's' : ''})</span>
-        </Button>
+        {/* CTA Panier / Commander - Au-dessus de la navbar globale */}
+        <div className="p-4 bg-white border-t border-gray-200 mt-4 rounded-xl shadow-lg mb-4">
+          <Button
+            onClick={handleCheckout}
+            disabled={totalItems === 0}
+            className={`w-full flex items-center justify-center space-x-2 py-6 rounded-xl font-semibold transition duration-200 shadow-lg ${
+              totalItems > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <ShoppingCart size={20} />
+            <span>Passer la commande ({totalItems} article{totalItems > 1 ? 's' : ''})</span>
+          </Button>
+        </div>
       </div>
     </div>
   );
