@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
-import Landing from "@/pages/landing";
-import { ReactNode } from "react";
+import { useLocation } from "wouter";
+import { ReactNode, useEffect } from "react";
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -8,6 +8,14 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children }: AuthGuardProps) {
   const { isAuthenticated, isLoading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  // Redirect to /landing if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && location !== '/landing') {
+      setLocation('/landing');
+    }
+  }, [isAuthenticated, isLoading, location, setLocation]);
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -21,9 +29,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
     );
   }
 
-  // Show landing page if not authenticated
+  // Return null while redirecting to /landing
   if (!isAuthenticated) {
-    return <Landing />;
+    return null;
   }
 
   // Show children (protected content) if authenticated

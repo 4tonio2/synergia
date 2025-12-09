@@ -24,7 +24,7 @@ export function GlobalNavigation() {
   const [location, setLocation] = useLocation();
 
   // Pages où on ne veut pas afficher la navigation (ex: landing, enregistrement en cours, connexion/inscription)
-  const hiddenPaths = ['/landing', '/patients/*/record', '/recordings/new-free', '/login', '/home', '/signup', '/register', '/auth'];
+  const hiddenPaths = ['/', '/landing', '/patients/*/record', '/recordings/new-free', '/login', '/home', '/signup', '/register', '/auth'];
   
   const shouldHide = hiddenPaths.some(path => {
     if (path.includes('*')) {
