@@ -23,8 +23,8 @@ const NavItem = ({ icon: Icon, label, active, onClick }: NavItemProps) => (
 export function GlobalNavigation() {
   const [location, setLocation] = useLocation();
 
-  // Pages où on ne veut pas afficher la navigation (ex: landing, enregistrement en cours)
-  const hiddenPaths = ['/landing', '/patients/*/record', '/recordings/new-free'];
+  // Pages où on ne veut pas afficher la navigation (ex: landing, enregistrement en cours, connexion)
+  const hiddenPaths = ['/landing', '/patients/*/record', '/recordings/new-free', '/login', '/home'];
   
   const shouldHide = hiddenPaths.some(path => {
     if (path.includes('*')) {

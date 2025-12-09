@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search, Pencil, Check, X } from 'lucide-react';
+import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search, Pencil, Check, X, Mic, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { VoiceRecorderButton } from '@/components/VoiceRecorderButton';
 import { PhotoUploader } from '@/components/PhotoUploader';
 import { TransmissionModal, ActionsRapidesModal } from '@/components/Modal';
 import { useAppStore } from '@/lib/appStore';
@@ -67,6 +66,13 @@ export default function E05_VisitFlow() {
   const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
   const [editingContactData, setEditingContactData] = useState<Record<string, string>>({});
   
+  // États pour l'enregistrement vocal
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [recordingType, setRecordingType] = useState<'crm' | 'prescription' | 'observation' | null>(null);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const chunksRef = React.useRef<Blob[]>([]);
+  
   const handleBack = () => {
     if (patientId) {
       setLocation(`/patients/${patientId}`);
@@ -81,6 +87,80 @@ export default function E05_VisitFlow() {
       ...prev,
       notesRaw: prev.notesRaw + text
     }));
+  };
+  
+  const startRecording = async (type: 'crm' | 'prescription' | 'observation') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        
+        setIsProcessing(true);
+        
+        try {
+          const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'recording.webm');
+          
+          const response = await fetch('/api/voice/transcribe', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Erreur de transcription');
+          }
+          
+          const { text } = await response.json();
+          
+          // Ajouter un préfixe selon le type
+          let prefix = '';
+          if (recordingType === 'crm') prefix = '[CRM] ';
+          if (recordingType === 'prescription') prefix = '[PRESCRIPTION] ';
+          if (recordingType === 'observation') prefix = '[OBSERVATION] ';
+          
+          handleTranscription(prefix + text, audioBlob);
+          setIsProcessing(false);
+          setRecordingType(null);
+          
+        } catch (error) {
+          console.error('[VOICE] Erreur de transcription:', error);
+          toast.error('Erreur lors de la transcription. Veuillez réessayer.');
+          setIsProcessing(false);
+          setRecordingType(null);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingType(type);
+      
+    } catch (error) {
+      console.error('Erreur d\'accès au microphone:', error);
+      toast.error('Impossible d\'accéder au microphone. Vérifiez les permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
   };
   
   const handleGenerateSummary = async () => {
@@ -462,38 +542,73 @@ export default function E05_VisitFlow() {
               {/* Bouton CRM - Bleu */}
               <div className="flex flex-col items-center">
                 <button
-                  onClick={() => {/* TODO: Spécifier type CRM */}}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-xl shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                  onClick={() => isRecording && recordingType === 'crm' ? stopRecording() : !isRecording && startRecording('crm')}
+                  disabled={isProcessing || (isRecording && recordingType !== 'crm')}
+                  className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                    isRecording && recordingType === 'crm'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 animate-pulse'
+                      : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:scale-105 active:scale-95'
+                  } ${(isProcessing || (isRecording && recordingType !== 'crm')) && 'opacity-50 cursor-not-allowed'}`}
                 >
-                  CRM
+                  {isRecording && recordingType === 'crm' ? (
+                    <><Square className="w-4 h-4" /> Stop</>
+                  ) : (
+                    <><Mic className="w-4 h-4" /> CRM</>
+                  )}
                 </button>
               </div>
 
               {/* Bouton Prescription - Orange */}
               <div className="flex flex-col items-center">
                 <button
-                  onClick={() => {/* TODO: Spécifier type Prescription */}}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold rounded-xl shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                  onClick={() => isRecording && recordingType === 'prescription' ? stopRecording() : !isRecording && startRecording('prescription')}
+                  disabled={isProcessing || (isRecording && recordingType !== 'prescription')}
+                  className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                    isRecording && recordingType === 'prescription'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 animate-pulse'
+                      : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 hover:scale-105 active:scale-95'
+                  } ${(isProcessing || (isRecording && recordingType !== 'prescription')) && 'opacity-50 cursor-not-allowed'}`}
                 >
-                  Prescription
+                  {isRecording && recordingType === 'prescription' ? (
+                    <><Square className="w-4 h-4" /> Stop</>
+                  ) : (
+                    <><Mic className="w-4 h-4" /> Presc.</>
+                  )}
                 </button>
               </div>
 
               {/* Bouton Observation - Rouge */}
               <div className="flex flex-col items-center">
                 <button
-                  onClick={() => {/* TODO: Spécifier type Observation */}}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                  onClick={() => isRecording && recordingType === 'observation' ? stopRecording() : !isRecording && startRecording('observation')}
+                  disabled={isProcessing || (isRecording && recordingType !== 'observation')}
+                  className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                    isRecording && recordingType === 'observation'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 animate-pulse'
+                      : 'bg-gradient-to-r from-red-400 to-red-500 hover:from-red-500 hover:to-red-600 hover:scale-105 active:scale-95'
+                  } ${(isProcessing || (isRecording && recordingType !== 'observation')) && 'opacity-50 cursor-not-allowed'}`}
                 >
-                  Observation
+                  {isRecording && recordingType === 'observation' ? (
+                    <><Square className="w-4 h-4" /> Stop</>
+                  ) : (
+                    <><Mic className="w-4 h-4" /> Obs.</>
+                  )}
                 </button>
               </div>
             </div>
             
-            {/* Bouton vocal original en dessous */}
-            <div className="w-full flex justify-center pt-2">
-              <VoiceRecorderButton onTranscription={handleTranscription} />
-            </div>
+            {/* Messages d'état */}
+            {isRecording && (
+              <p className="text-sm text-red-600 font-medium animate-pulse">
+                🔴 Enregistrement en cours...
+              </p>
+            )}
+            {isProcessing && (
+              <p className="text-sm text-blue-600 font-medium flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Transcription en cours...
+              </p>
+            )}
           </div>
         </div>
         
