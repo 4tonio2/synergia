@@ -546,7 +546,7 @@ export default function E05_VisitFlow() {
                   disabled={isProcessing || (isRecording && recordingType !== 'crm')}
                   className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
                     isRecording && recordingType === 'crm'
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 animate-pulse'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
                       : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:scale-105 active:scale-95'
                   } ${(isProcessing || (isRecording && recordingType !== 'crm')) && 'opacity-50 cursor-not-allowed'}`}
                 >
@@ -565,7 +565,7 @@ export default function E05_VisitFlow() {
                   disabled={isProcessing || (isRecording && recordingType !== 'prescription')}
                   className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
                     isRecording && recordingType === 'prescription'
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 animate-pulse'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
                       : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 hover:scale-105 active:scale-95'
                   } ${(isProcessing || (isRecording && recordingType !== 'prescription')) && 'opacity-50 cursor-not-allowed'}`}
                 >
@@ -584,7 +584,7 @@ export default function E05_VisitFlow() {
                   disabled={isProcessing || (isRecording && recordingType !== 'observation')}
                   className={`w-full py-3 px-4 text-white font-semibold rounded-xl shadow-md transition-all duration-200 flex items-center justify-center gap-2 ${
                     isRecording && recordingType === 'observation'
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 animate-pulse'
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
                       : 'bg-gradient-to-r from-red-400 to-red-500 hover:from-red-500 hover:to-red-600 hover:scale-105 active:scale-95'
                   } ${(isProcessing || (isRecording && recordingType !== 'observation')) && 'opacity-50 cursor-not-allowed'}`}
                 >
