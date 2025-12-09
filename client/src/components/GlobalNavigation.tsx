@@ -1,5 +1,6 @@
 import { useLocation } from "wouter";
 import { Calendar, Volume2, Settings, Mic, ShoppingCart } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -22,9 +23,10 @@ const NavItem = ({ icon: Icon, label, active, onClick }: NavItemProps) => (
 
 export function GlobalNavigation() {
   const [location, setLocation] = useLocation();
+  const { isAuthenticated } = useAuth();
 
   // Pages où on ne veut pas afficher la navigation (ex: landing, enregistrement en cours, connexion/inscription)
-  const hiddenPaths = ['/', '/landing', '/patients/*/record', '/recordings/new-free', '/login', '/home', '/signup', '/register', '/auth'];
+  const hiddenPaths = ['/landing', '/patients/*/record', '/recordings/new-free', '/login', '/home', '/signup', '/register', '/auth'];
   
   const shouldHide = hiddenPaths.some(path => {
     if (path.includes('*')) {
@@ -33,6 +35,11 @@ export function GlobalNavigation() {
     }
     return location === path;
   });
+
+  // Cacher aussi la navigation si on est sur "/" et pas authentifié
+  if (!isAuthenticated && location === '/') {
+    return null;
+  }
 
   if (shouldHide) {
     return null;
