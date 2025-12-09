@@ -456,8 +456,44 @@ export default function E05_VisitFlow() {
             className="min-h-32 resize-none"
           />
           
-          <div className="flex flex-col items-center gap-2 pt-2">
-            <VoiceRecorderButton onTranscription={handleTranscription} />
+          <div className="flex flex-col items-center gap-3 pt-4">
+            <p className="text-xs font-medium text-gray-600">Type d'enregistrement</p>
+            <div className="grid grid-cols-3 gap-3 w-full">
+              {/* Bouton CRM - Bleu */}
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={() => {/* TODO: Spécifier type CRM */}}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-xl shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                >
+                  CRM
+                </button>
+              </div>
+
+              {/* Bouton Prescription - Orange */}
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={() => {/* TODO: Spécifier type Prescription */}}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold rounded-xl shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                >
+                  Prescription
+                </button>
+              </div>
+
+              {/* Bouton Observation - Rouge */}
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={() => {/* TODO: Spécifier type Observation */}}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold rounded-xl shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                >
+                  Observation
+                </button>
+              </div>
+            </div>
+            
+            {/* Bouton vocal original en dessous */}
+            <div className="w-full flex justify-center pt-2">
+              <VoiceRecorderButton onTranscription={handleTranscription} />
+            </div>
           </div>
         </div>
         
