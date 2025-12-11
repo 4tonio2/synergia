@@ -12,6 +12,21 @@ export function ObservationsDisplay({ data, onValidate }: ObservationsDisplayPro
   const [validatedItems, setValidatedItems] = useState<Set<string>>(new Set());
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Fonction pour nettoyer le texte des instructions de l'agent IA
+  const cleanObservationText = (text: string): string => {
+    if (!text) return '';
+    
+    // Supprimer les instructions de l'agent (commence par "INSTRUCTIONS AGENT" ou contient du JSON structuré)
+    if (text.includes('INSTRUCTIONS AGENT') || text.includes('tool match_')) {
+      return ''; // Ne rien afficher si c'est uniquement des instructions
+    }
+    
+    // Supprimer les blocs JSON si présents
+    let cleaned = text.replace(/\{[\s\S]*"observation"[\s\S]*\}/g, '').trim();
+    
+    return cleaned;
+  };
+
   const handleValidate = (observationText: string, matchId: string) => {
     const key = `${observationText}-${matchId}`;
     setValidatedItems(prev => new Set([...prev, key]));
@@ -37,15 +52,21 @@ export function ObservationsDisplay({ data, onValidate }: ObservationsDisplayPro
         </div>
       )}
 
-      {data.observations.map((observation, idx) => (
-        <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-3">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <h3 className="font-semibold text-gray-800 text-lg">
-                {observation.observation}
-              </h3>
+      {data.observations.map((observation, idx) => {
+        const cleanedText = cleanObservationText(observation.observation);
+        
+        // Ne pas afficher l'observation si elle ne contient que des instructions
+        if (!cleanedText) return null;
+        
+        return (
+          <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-800 text-lg">
+                  {cleanedText}
+                </h3>
+              </div>
             </div>
-          </div>
 
           {observation.matches.length > 0 ? (
             <div className="space-y-2">
@@ -128,7 +149,8 @@ export function ObservationsDisplay({ data, onValidate }: ObservationsDisplayPro
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
