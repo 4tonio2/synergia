@@ -128,17 +128,18 @@ export default function E05_VisitFlow() {
         
         setIsProcessing(true);
         
-        // Sauvegarder le type d'enregistrement avant qu'il ne soit réinitialisé
+        // Sauvegarder le type d'enregistrement et le texte existant avant qu'ils ne soient modifiés
         const currentRecordingType = recordingType;
+        const existingText = formData.notesRaw;
         
         try {
           const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-          const formData = new FormData();
-          formData.append('audio', audioBlob, 'recording.webm');
+          const uploadFormData = new FormData();
+          uploadFormData.append('audio', audioBlob, 'recording.webm');
           
           const response = await fetch('/api/voice/transcribe', {
             method: 'POST',
-            body: formData
+            body: uploadFormData
           });
           
           if (!response.ok) {
@@ -156,15 +157,18 @@ export default function E05_VisitFlow() {
           
           handleTranscription(prefix + text, audioBlob);
           
+          // Créer le texte complet pour le webhook (existant + nouveau)
+          const fullText = existingText + prefix + text;
+          
           // Appeler le webhook approprié selon le type d'enregistrement
           if (currentRecordingType === 'prescription') {
             setIsLoadingWebhook(true);
             try {
-              console.log('[WEBHOOK] Envoi vers webhook prescriptions avec:', text);
+              console.log('[WEBHOOK] Envoi vers webhook prescriptions avec le texte complet:', fullText);
               const webhookResponse = await fetch('https://treeporteur-n8n.fr/webhook/prescriptions-v1', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ raw_text: text })
+                body: JSON.stringify({ raw_text: fullText })
               });
               
               console.log('[WEBHOOK] Statut réponse:', webhookResponse.status);
@@ -191,11 +195,11 @@ export default function E05_VisitFlow() {
           } else if (currentRecordingType === 'observation') {
             setIsLoadingWebhook(true);
             try {
-              console.log('[WEBHOOK] Envoi vers webhook observations avec:', text);
+              console.log('[WEBHOOK] Envoi vers webhook observations avec le texte complet:', fullText);
               const webhookResponse = await fetch('https://treeporteur-n8n.fr/webhook/search-observations-v1', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ raw_text: text })
+                body: JSON.stringify({ raw_text: fullText })
               });
               
               console.log('[WEBHOOK] Statut réponse:', webhookResponse.status);
