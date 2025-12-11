@@ -8,6 +8,9 @@ import { PhotoUploader } from '@/components/PhotoUploader';
 import { TransmissionModal, ActionsRapidesModal } from '@/components/Modal';
 import { useAppStore } from '@/lib/appStore';
 import { useCustomToast } from '@/hooks/useToast';
+import { PrescriptionsResponse, ObservationsResponse } from '@/types/webhook-responses';
+import { PrescriptionsDisplay } from '@/components/PrescriptionsDisplay';
+import { ObservationsDisplay } from '@/components/ObservationsDisplay';
 
 type VisitType = 'soin' | 'controle' | 'pansement' | 'suivi-post-op' | 'autre';
 
@@ -73,6 +76,11 @@ export default function E05_VisitFlow() {
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
   
+  // États pour les résultats des webhooks
+  const [prescriptionsResults, setPrescriptionsResults] = useState<PrescriptionsResponse | null>(null);
+  const [observationsResults, setObservationsResults] = useState<ObservationsResponse | null>(null);
+  const [isLoadingWebhook, setIsLoadingWebhook] = useState(false);
+  
   const handleBack = () => {
     if (patientId) {
       setLocation(`/patients/${patientId}`);
@@ -135,6 +143,54 @@ export default function E05_VisitFlow() {
           if (recordingType === 'observation') prefix = '[OBSERVATION] ';
           
           handleTranscription(prefix + text, audioBlob);
+          
+          // Appeler le webhook approprié selon le type d'enregistrement
+          if (recordingType === 'prescription') {
+            setIsLoadingWebhook(true);
+            try {
+              const webhookResponse = await fetch('https://treeporteur-n8n.fr/webhook/prescriptions-v1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ raw_text: text })
+              });
+              
+              if (webhookResponse.ok) {
+                const data: PrescriptionsResponse = await webhookResponse.json();
+                setPrescriptionsResults(data);
+                toast.success('Prescriptions analysées avec succès !');
+              } else {
+                throw new Error('Erreur lors de l\'analyse des prescriptions');
+              }
+            } catch (webhookError) {
+              console.error('[WEBHOOK] Erreur prescriptions:', webhookError);
+              toast.error('Erreur lors de l\'analyse des prescriptions');
+            } finally {
+              setIsLoadingWebhook(false);
+            }
+          } else if (recordingType === 'observation') {
+            setIsLoadingWebhook(true);
+            try {
+              const webhookResponse = await fetch('https://treeporteur-n8n.fr/webhook/search-observations-v1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ raw_text: text })
+              });
+              
+              if (webhookResponse.ok) {
+                const data: ObservationsResponse = await webhookResponse.json();
+                setObservationsResults(data);
+                toast.success('Observations analysées avec succès !');
+              } else {
+                throw new Error('Erreur lors de l\'analyse des observations');
+              }
+            } catch (webhookError) {
+              console.error('[WEBHOOK] Erreur observations:', webhookError);
+              toast.error('Erreur lors de l\'analyse des observations');
+            } finally {
+              setIsLoadingWebhook(false);
+            }
+          }
+          
           setIsProcessing(false);
           setRecordingType(null);
           
@@ -609,8 +665,40 @@ export default function E05_VisitFlow() {
                 Transcription en cours...
               </p>
             )}
+            {isLoadingWebhook && (
+              <p className="text-sm text-purple-600 font-medium flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Analyse en cours...
+              </p>
+            )}
           </div>
         </div>
+        
+        {/* Résultats des prescriptions */}
+        {prescriptionsResults && (
+          <div className="bg-orange-50 rounded-2xl shadow-sm p-4 border-l-4 border-orange-400">
+            <h3 className="text-sm font-semibold text-orange-800 mb-3">Résultats des Prescriptions</h3>
+            <PrescriptionsDisplay 
+              data={prescriptionsResults}
+              onValidate={(prescriptionId, matchId) => {
+                console.log('Prescription validée:', prescriptionId, matchId);
+              }}
+            />
+          </div>
+        )}
+        
+        {/* Résultats des observations */}
+        {observationsResults && (
+          <div className="bg-red-50 rounded-2xl shadow-sm p-4 border-l-4 border-red-400">
+            <h3 className="text-sm font-semibold text-red-800 mb-3">Résultats des Observations</h3>
+            <ObservationsDisplay 
+              data={observationsResults}
+              onValidate={(observationId, matchId) => {
+                console.log('Observation validée:', observationId, matchId);
+              }}
+            />
+          </div>
+        )}
         
         {/* Résumé IA (si généré) */}
         {formData.notesSummary && (
