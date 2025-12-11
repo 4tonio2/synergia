@@ -701,6 +701,33 @@ export default function E05_VisitFlow() {
                 Analyse en cours...
               </p>
             )}
+            
+            {/* BOUTON DE TEST DEBUG */}
+            <button
+              onClick={() => {
+                console.log('[TEST] Définition manuelle de prescriptionsResults');
+                setPrescriptionsResults({
+                  prescriptions: [
+                    {
+                      prescription: "TEST - Injection intramusculaire",
+                      matches: [
+                        {
+                          id: "test-1",
+                          content: "Injection intramusculaire de test",
+                          category: "Injection",
+                          tags: ["AMI", "IM"],
+                          polarity: "authorized",
+                          similarity: 0.95
+                        }
+                      ]
+                    }
+                  ]
+                });
+              }}
+              className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-semibold"
+            >
+              🧪 TEST: Simuler résultat prescription
+            </button>
           </div>
         </div>
         
