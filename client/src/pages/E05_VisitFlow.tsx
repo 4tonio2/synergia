@@ -150,7 +150,16 @@ export default function E05_VisitFlow() {
             throw new Error(error.error || 'Erreur de transcription');
           }
           
-          const { text } = await response.json();
+          let { text } = await response.json();
+          
+          // Nettoyer le texte de la transcription (enlever les artefacts)
+          text = text
+            .replace(/❤️\s*par\s+SousTitreur\.com/gi, '')  // Enlever "❤️ par SousTitreur.com"
+            .replace(/Sous-titré\s+par\s+.+?\.com/gi, '')   // Enlever "Sous-titré par ..."
+            .replace(/\[BLANC\]/gi, '')                      // Enlever [BLANC]
+            .replace(/\[Musique\]/gi, '')                    // Enlever [Musique]
+            .replace(/\[Applaudissements\]/gi, '')           // Enlever [Applaudissements]
+            .trim();
           
           // Ajouter un préfixe selon le type
           let prefix = '';
@@ -713,33 +722,6 @@ export default function E05_VisitFlow() {
                 Analyse en cours...
               </p>
             )}
-            
-            {/* BOUTON DE TEST DEBUG */}
-            <button
-              onClick={() => {
-                console.log('[TEST] Définition manuelle de prescriptionsResults');
-                setPrescriptionsResults({
-                  prescriptions: [
-                    {
-                      prescription: "TEST - Injection intramusculaire",
-                      matches: [
-                        {
-                          id: "test-1",
-                          content: "Injection intramusculaire de test",
-                          category: "Injection",
-                          tags: ["AMI", "IM"],
-                          polarity: "authorized",
-                          similarity: 0.95
-                        }
-                      ]
-                    }
-                  ]
-                });
-              }}
-              className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-semibold"
-            >
-              🧪 TEST: Simuler résultat prescription
-            </button>
           </div>
         </div>
         
