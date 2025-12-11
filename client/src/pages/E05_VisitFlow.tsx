@@ -738,16 +738,6 @@ export default function E05_VisitFlow() {
           </div>
         )}
         
-        {/* DEBUG: Afficher l'état brut */}
-        {prescriptionsResults && (
-          <div className="bg-gray-100 rounded-lg p-3 text-xs">
-            <p className="font-bold mb-2">DEBUG - État prescriptions:</p>
-            <pre className="whitespace-pre-wrap overflow-auto">
-              {JSON.stringify(prescriptionsResults, null, 2)}
-            </pre>
-          </div>
-        )}
-        
         {/* Résultats des observations */}
         {observationsResults && (
           <div className="bg-red-50 rounded-2xl shadow-sm p-4 border-l-4 border-red-400">
@@ -758,16 +748,6 @@ export default function E05_VisitFlow() {
                 console.log('Observation validée:', observationId, matchId);
               }}
             />
-          </div>
-        )}
-        
-        {/* DEBUG: Afficher l'état brut */}
-        {observationsResults && (
-          <div className="bg-gray-100 rounded-lg p-3 text-xs">
-            <p className="font-bold mb-2">DEBUG - État observations:</p>
-            <pre className="whitespace-pre-wrap overflow-auto">
-              {JSON.stringify(observationsResults, null, 2)}
-            </pre>
           </div>
         )}
         
