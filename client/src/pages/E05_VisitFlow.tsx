@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useRoute } from 'wouter';
 import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search, Pencil, Check, X, Mic, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -80,6 +80,15 @@ export default function E05_VisitFlow() {
   const [prescriptionsResults, setPrescriptionsResults] = useState<PrescriptionsResponse | null>(null);
   const [observationsResults, setObservationsResults] = useState<ObservationsResponse | null>(null);
   const [isLoadingWebhook, setIsLoadingWebhook] = useState(false);
+  
+  // DEBUG: Tracer les changements d'état
+  useEffect(() => {
+    console.log('[DEBUG] prescriptionsResults changé:', prescriptionsResults);
+  }, [prescriptionsResults]);
+  
+  useEffect(() => {
+    console.log('[DEBUG] observationsResults changé:', observationsResults);
+  }, [observationsResults]);
   
   const handleBack = () => {
     if (patientId) {
@@ -163,7 +172,10 @@ export default function E05_VisitFlow() {
               if (webhookResponse.ok) {
                 const data: PrescriptionsResponse = await webhookResponse.json();
                 console.log('[WEBHOOK] Données reçues:', data);
+                console.log('[WEBHOOK] Nombre de prescriptions:', data.prescriptions?.length);
+                console.log('[WEBHOOK] AVANT setPrescriptionsResults');
                 setPrescriptionsResults(data);
+                console.log('[WEBHOOK] APRÈS setPrescriptionsResults');
                 toast.success('Prescriptions analysées avec succès !');
               } else {
                 const errorText = await webhookResponse.text();
@@ -191,7 +203,10 @@ export default function E05_VisitFlow() {
               if (webhookResponse.ok) {
                 const data: ObservationsResponse = await webhookResponse.json();
                 console.log('[WEBHOOK] Données reçues:', data);
+                console.log('[WEBHOOK] Nombre d\'observations:', data.observations?.length);
+                console.log('[WEBHOOK] AVANT setObservationsResults');
                 setObservationsResults(data);
+                console.log('[WEBHOOK] APRÈS setObservationsResults');
                 toast.success('Observations analysées avec succès !');
               } else {
                 const errorText = await webhookResponse.text();
@@ -702,6 +717,16 @@ export default function E05_VisitFlow() {
           </div>
         )}
         
+        {/* DEBUG: Afficher l'état brut */}
+        {prescriptionsResults && (
+          <div className="bg-gray-100 rounded-lg p-3 text-xs">
+            <p className="font-bold mb-2">DEBUG - État prescriptions:</p>
+            <pre className="whitespace-pre-wrap overflow-auto">
+              {JSON.stringify(prescriptionsResults, null, 2)}
+            </pre>
+          </div>
+        )}
+        
         {/* Résultats des observations */}
         {observationsResults && (
           <div className="bg-red-50 rounded-2xl shadow-sm p-4 border-l-4 border-red-400">
@@ -712,6 +737,16 @@ export default function E05_VisitFlow() {
                 console.log('Observation validée:', observationId, matchId);
               }}
             />
+          </div>
+        )}
+        
+        {/* DEBUG: Afficher l'état brut */}
+        {observationsResults && (
+          <div className="bg-gray-100 rounded-lg p-3 text-xs">
+            <p className="font-bold mb-2">DEBUG - État observations:</p>
+            <pre className="whitespace-pre-wrap overflow-auto">
+              {JSON.stringify(observationsResults, null, 2)}
+            </pre>
           </div>
         )}
         
