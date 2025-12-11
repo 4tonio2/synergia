@@ -75,6 +75,7 @@ export default function E05_VisitFlow() {
   const [recordingType, setRecordingType] = useState<'crm' | 'prescription' | 'observation' | null>(null);
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const chunksRef = React.useRef<Blob[]>([]);
+  const recordingTypeRef = React.useRef<'crm' | 'prescription' | 'observation' | null>(null);
   
   // États pour les résultats des webhooks
   const [prescriptionsResults, setPrescriptionsResults] = useState<PrescriptionsResponse | null>(null);
@@ -128,9 +129,11 @@ export default function E05_VisitFlow() {
         
         setIsProcessing(true);
         
-        // Sauvegarder le type d'enregistrement et le texte existant avant qu'ils ne soient modifiés
-        const currentRecordingType = recordingType;
+        // Utiliser la ref pour obtenir le type d'enregistrement
+        const currentRecordingType = recordingTypeRef.current;
         const existingText = formData.notesRaw;
+        
+        console.log('[VOICE] Type d\'enregistrement capturé:', currentRecordingType);
         
         try {
           const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
@@ -227,18 +230,23 @@ export default function E05_VisitFlow() {
           
           setIsProcessing(false);
           setRecordingType(null);
+          recordingTypeRef.current = null;  // Réinitialiser la ref
           
         } catch (error) {
           console.error('[VOICE] Erreur de transcription:', error);
           toast.error('Erreur lors de la transcription. Veuillez réessayer.');
           setIsProcessing(false);
           setRecordingType(null);
+          recordingTypeRef.current = null;  // Réinitialiser la ref en cas d'erreur
         }
       };
 
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingType(type);
+      recordingTypeRef.current = type;  // Stocker dans la ref pour la closure
+      
+      console.log('[VOICE] Enregistrement démarré, type:', type);
       
     } catch (error) {
       console.error('Erreur d\'accès au microphone:', error);
