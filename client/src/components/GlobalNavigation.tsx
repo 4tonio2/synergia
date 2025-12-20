@@ -61,9 +61,10 @@ export function GlobalNavigation() {
   };
 
   return (
-    /* Navigation Footer - Dans le flux flex, pas fixed */
-    <div className="flex-shrink-0 bg-white border-t border-gray-200 shadow-lg">
-      <div className="flex items-center justify-around py-2 pt-3">
+    /* Navigation Footer - fixed to viewport bottom, constrained to app width */
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="max-w-md mx-auto">
+        <div className="flex items-center justify-around py-2 pt-3 px-4">
         {/* Tournée */}
         <NavItem 
           icon={Calendar} 
@@ -106,6 +107,7 @@ export function GlobalNavigation() {
           active={isActive('/shop')} 
           onClick={() => handleNavigate('/shop')} 
         />
+        </div>
       </div>
     </div>
   );

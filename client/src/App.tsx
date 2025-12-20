@@ -185,7 +185,7 @@ function App() {
             <div className="mx-auto max-w-md h-screen bg-white shadow-xl flex flex-col overflow-hidden">
               <Toaster />
               {/* Zone de contenu scrollable */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
                 <Router />
               </div>
               {/* Navbar fixe en bas */}
