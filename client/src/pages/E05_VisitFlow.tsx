@@ -61,6 +61,7 @@ export default function E05_VisitFlow() {
   const [showTransmissionModal, setShowTransmissionModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [actionsSuggestions, setActionsSuggestions] = useState<any | null>(null);
+  const [isPreparingActions, setIsPreparingActions] = useState(false);
   const [contactsResults, setContactsResults] = useState<any[]>([]);
   const [clientFacture, setClientFacture] = useState<any | null>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -895,6 +896,7 @@ export default function E05_VisitFlow() {
           
           <Button
             onClick={async () => {
+              setIsPreparingActions(true);
               // Prepare suggestions from notes before opening modal
               if (formData.notesRaw && formData.notesRaw.trim()) {
                 try {
@@ -997,12 +999,23 @@ export default function E05_VisitFlow() {
               }
 
               setShowActionsModal(true);
+              setIsPreparingActions(false);
             }}
             variant="outline"
             className="w-full h-12 rounded-full"
+            disabled={isPreparingActions}
           >
-            <Zap className="w-5 h-5 mr-2" />
-            Actions rapides...
+            {isPreparingActions ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Préparation...
+              </>
+            ) : (
+              <>
+                <Zap className="w-5 h-5 mr-2" />
+                Actions rapides...
+              </>
+            )}
           </Button>
 
           <Button
