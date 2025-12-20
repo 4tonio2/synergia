@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useRoute } from "wouter";
 import { Volume2, AlertTriangle, Plus, CheckCircle, Trash, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ export default function E09_VisitDetail() {
   const [, patientParams] = useRoute('/patients/:patientId/visits/:visitId');
   const [, recordingParams] = useRoute('/recordings/:id');
   const [location, setLocation] = useLocation();
-  const { getVisitById, getPatientById, deleteVisit } = useAppStore();
+  const { getVisitById, getPatientById, deleteVisit, updateVisit } = useAppStore();
   const { confirm } = useConfirmDialog();
   const toast = useCustomToast();
   
@@ -22,6 +22,32 @@ export default function E09_VisitDetail() {
   const patient = visit?.patientId ? getPatientById(visit.patientId) : null;
   
   const [note, setNote] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Local editable structured details state
+  const initialStructured = visit?.iaData?.structuredDetails || {
+    type: '',
+    douleur: 0,
+    constantes: '',
+    alertes: [],
+    date: '',
+    time: '',
+  };
+
+  const [editedStructured, setEditedStructured] = useState(() => ({ ...initialStructured }));
+
+  // timer ref not strictly necessary here but keep pattern
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    // sync when visit changes (but avoid first render double set)
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      setEditedStructured({ ...initialStructured });
+      return;
+    }
+    setEditedStructured({ ...(visit?.iaData?.structuredDetails || initialStructured) });
+  }, [visit?.iaData?.structuredDetails]);
 
   if (!visit) {
     return (
@@ -45,8 +71,8 @@ export default function E09_VisitDetail() {
   };
 
   const handleEditVisit = () => {
-    // TODO: Navigate to edit mode
-    toast.info('Fonctionnalité d\'édition à venir');
+    // Activer le mode édition local pour les champs structurés
+    setIsEditing(true);
   };
 
   // Si on est arrivé depuis l'historique avec ?editable=1, permettre l'édition
@@ -80,6 +106,39 @@ export default function E09_VisitDetail() {
     deleteVisit(visit.id);
     toast.success('Visite supprimée avec succès');
     handleBack();
+  };
+
+  const handleCancelEdit = () => {
+    // Réinitialiser les valeurs éditées depuis la source
+    setEditedStructured({ ...(visit?.iaData?.structuredDetails || initialStructured) });
+    setIsEditing(false);
+    toast.info('Édition annulée');
+  };
+
+  const handleSaveEdit = () => {
+    // Basic validation
+    const douleurVal = Number(editedStructured.douleur) || 0;
+    if (isNaN(douleurVal) || douleurVal < 0 || douleurVal > 10) {
+      toast.error('La valeur de douleur doit être un nombre entre 0 et 10');
+      return;
+    }
+
+    const newIAData = {
+      summary: visit?.iaData?.summary || '',
+      structuredDetails: {
+        ...editedStructured,
+        douleur: douleurVal,
+      },
+      transcription: visit?.iaData?.transcription || '',
+      riskLevel: visit?.iaData?.riskLevel || '',
+      notes: visit?.iaData?.notes,
+      audioOriginal: visit?.iaData?.audioOriginal,
+      audioSynthesis: visit?.iaData?.audioSynthesis,
+    };
+
+    updateVisit(visit.id, { iaData: newIAData });
+    setIsEditing(false);
+    toast.success('Champs structurés mis à jour');
   };
 
   return (
@@ -141,23 +200,70 @@ export default function E09_VisitDetail() {
         )}
         
         {/* Champs Structurés */}
-        {visit.iaData?.structuredDetails && (
+        {visit.iaData && (
           <div className="mb-6 p-4 bg-white rounded-xl shadow-md grid grid-cols-2 gap-y-3 text-sm">
             <h3 className="col-span-2 text-lg font-bold mb-2">Champs Structurés</h3>
-            <p className="text-gray-500">Date / Heure:</p>
-            <p className="font-medium text-gray-800">
-              {visit.iaData.structuredDetails.date}, {visit.iaData.structuredDetails.time}
-            </p>
-            {visit.iaData.structuredDetails.type && (
-              <>
-                <p className="text-gray-500">Type de visite:</p>
-                <p className="font-medium text-gray-800">{visit.iaData.structuredDetails.type}</p>
-              </>
+
+            <p className="text-gray-500">Date</p>
+            {isEditing ? (
+              <input
+                value={editedStructured.date}
+                onChange={(e) => setEditedStructured(prev => ({ ...prev, date: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md"
+                placeholder="JJ/MM/AAAA"
+              />
+            ) : (
+              <p className="font-medium text-gray-800">{visit.iaData.structuredDetails.date}</p>
             )}
-            <p className="text-gray-500">Douleur (0-10):</p>
-            <p className="font-medium text-gray-800">{visit.iaData.structuredDetails.douleur}</p>
-            <p className="text-gray-500">Constantes:</p>
-            <p className="font-medium text-gray-800">{visit.iaData.structuredDetails.constantes}</p>
+
+            <p className="text-gray-500">Heure</p>
+            {isEditing ? (
+              <input
+                value={editedStructured.time}
+                onChange={(e) => setEditedStructured(prev => ({ ...prev, time: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md"
+                placeholder="HH:MM"
+              />
+            ) : (
+              <p className="font-medium text-gray-800">{visit.iaData.structuredDetails.time}</p>
+            )}
+
+            <p className="text-gray-500">Type de visite</p>
+            {isEditing ? (
+              <input
+                value={editedStructured.type}
+                onChange={(e) => setEditedStructured(prev => ({ ...prev, type: e.target.value }))}
+                className="col-span-2 w-full px-3 py-2 border border-gray-200 rounded-md"
+                placeholder="Ex: Soins, Contrôle..."
+              />
+            ) : (
+              <p className="font-medium text-gray-800 col-span-2">{visit.iaData.structuredDetails.type}</p>
+            )}
+
+            <p className="text-gray-500">Douleur (0-10)</p>
+            {isEditing ? (
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={String(editedStructured.douleur)}
+                onChange={(e) => setEditedStructured(prev => ({ ...prev, douleur: Number(e.target.value) }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md"
+              />
+            ) : (
+              <p className="font-medium text-gray-800">{visit.iaData.structuredDetails.douleur}</p>
+            )}
+
+            <p className="text-gray-500">Constantes</p>
+            {isEditing ? (
+              <Textarea
+                value={editedStructured.constantes}
+                onChange={(e) => setEditedStructured(prev => ({ ...prev, constantes: e.target.value }))}
+                className="col-span-2"
+              />
+            ) : (
+              <p className="font-medium text-gray-800 col-span-2">{visit.iaData.structuredDetails.constantes}</p>
+            )}
           </div>
         )}
 
@@ -189,19 +295,30 @@ export default function E09_VisitDetail() {
 
         {/* Actions */}
         <div className="space-y-3">
-          <Button 
-            className="w-full h-12 font-semibold"
-            onClick={handleEditVisit}
-            // Autoriser l'édition si la visite n'est pas validée, ou si on vient de l'historique
-            disabled={visit.validated && !allowEditFromHistory}
-          >
-            {visit.validated ? (
-              <><FileText className="mr-2" size={20} /> Modifier le rapport</>
-            ) : (
-              <><CheckCircle className="mr-2" size={20} /> Reprendre la validation</>
-            )}
-          </Button>
-          
+          {isEditing ? (
+            <div className="flex gap-3">
+              <Button className="flex-1 h-12 font-semibold bg-green-600 hover:bg-green-700" onClick={handleSaveEdit}>
+                <CheckCircle className="mr-2" size={18} /> Enregistrer
+              </Button>
+              <Button variant="outline" className="flex-1 h-12" onClick={handleCancelEdit}>
+                Annuler
+              </Button>
+            </div>
+          ) : (
+            <Button 
+              className="w-full h-12 font-semibold"
+              onClick={() => setIsEditing(true)}
+              // Autoriser l'édition si la visite n'est pas validée, ou si on vient de l'historique
+              disabled={visit.validated && !allowEditFromHistory}
+            >
+              {visit.validated ? (
+                <><FileText className="mr-2" size={20} /> Modifier le rapport</>
+              ) : (
+                <><CheckCircle className="mr-2" size={20} /> Reprendre la validation</>
+              )}
+            </Button>
+          )}
+
           <Button 
             variant="destructive"
             className="w-full h-12 font-semibold"
