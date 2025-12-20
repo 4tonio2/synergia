@@ -32,7 +32,9 @@ export default function E08_History() {
   };
 
   const handleSelectVisit = (visitId: string) => {
-    setLocation(`/patients/${patient.id}/visits/${visitId}`);
+    // Naviguer vers le détail en indiquant qu'on vient de l'historique
+    // pour permettre l'édition du rapport si souhaité
+    setLocation(`/patients/${patient.id}/visits/${visitId}?editable=1`);
   };
 
   return (

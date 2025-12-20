@@ -12,7 +12,7 @@ import { useCustomToast } from "@/hooks/useToast";
 export default function E09_VisitDetail() {
   const [, patientParams] = useRoute('/patients/:patientId/visits/:visitId');
   const [, recordingParams] = useRoute('/recordings/:id');
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { getVisitById, getPatientById, deleteVisit } = useAppStore();
   const { confirm } = useConfirmDialog();
   const toast = useCustomToast();
@@ -48,6 +48,9 @@ export default function E09_VisitDetail() {
     // TODO: Navigate to edit mode
     toast.info('Fonctionnalité d\'édition à venir');
   };
+
+  // Si on est arrivé depuis l'historique avec ?editable=1, permettre l'édition
+  const allowEditFromHistory = location.includes('editable=1') || location.includes('editable=true');
 
   const handleDeleteVisit = async () => {
     const confirmed = await confirm(
@@ -177,7 +180,8 @@ export default function E09_VisitDetail() {
           <Button 
             className="w-full h-12 font-semibold"
             onClick={handleEditVisit}
-            disabled={visit.validated}
+            // Autoriser l'édition si la visite n'est pas validée, ou si on vient de l'historique
+            disabled={visit.validated && !allowEditFromHistory}
           >
             {visit.validated ? (
               <><FileText className="mr-2" size={20} /> Modifier le rapport</>
