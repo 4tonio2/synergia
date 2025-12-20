@@ -50,7 +50,19 @@ export default function E09_VisitDetail() {
   };
 
   // Si on est arrivé depuis l'historique avec ?editable=1, permettre l'édition
-  const allowEditFromHistory = location.includes('editable=1') || location.includes('editable=true');
+  // Utiliser URLSearchParams sur window.location.search pour être robuste
+  let allowEditFromHistory = false;
+  try {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const editable = params.get('editable');
+      allowEditFromHistory = editable === '1' || editable === 'true' || location.includes('editable=1') || location.includes('editable=true');
+    } else {
+      allowEditFromHistory = location.includes('editable=1') || location.includes('editable=true');
+    }
+  } catch (e) {
+    allowEditFromHistory = location.includes('editable=1') || location.includes('editable=true');
+  }
 
   const handleDeleteVisit = async () => {
     const confirmed = await confirm(
