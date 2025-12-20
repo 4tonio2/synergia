@@ -82,9 +82,10 @@ interface ActionsRapidesModalProps {
   onCreateRdv?: (rdv: any) => void;
   patientName?: string;
   patientId?: string;
+  suggestions?: any;
 }
 
-export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName, patientId }: ActionsRapidesModalProps) {
+export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName, patientId, suggestions }: ActionsRapidesModalProps) {
   const toast = useCustomToast();
   const [showScheduler, setShowScheduler] = useState(false);
 
@@ -110,6 +111,22 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
   ];
 
   const handleStartSchedule = () => {
+    // If suggestions are provided, prefill the form
+    if (suggestions) {
+      try {
+        setTitle(suggestions.title || 'Visite de contrôle');
+        setPerson(suggestions.person || (patientName && !String(patientName).toLowerCase().includes('enregistrement') ? patientName : ''));
+        setEmail(suggestions.email || '');
+        setDate(suggestions.date || '');
+        setTime(suggestions.time || '');
+        setDurationMinutes(suggestions.durationMinutes ? Number(suggestions.durationMinutes) : 15);
+        setLocation(suggestions.location || '');
+        setNotes(suggestions.notes || '');
+      } catch (e) {
+        // ignore
+        console.error('Error applying suggestions', e);
+      }
+    }
     setShowScheduler(true);
   };
 

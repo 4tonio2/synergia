@@ -1290,16 +1290,47 @@ export default function E05_VisitFlow() {
         content={transmissionContent}
       />
       
-      <ActionsRapidesModal
-        isOpen={showActionsModal}
-        onClose={() => setShowActionsModal(false)}
-        onCreateRdv={(rdv) => {
-          setRendezVous(prev => [rdv, ...prev]);
-          toast.success('Rendez-vous programmé');
-        }}
-        patientName={formData.patientName}
-        patientId={formData.patientId}
-      />
+      {/* Prepare suggestions from extracted rendez-vous or contacts */}
+      {(() => {
+        // Prefer explicit extracted rendez-vous
+        const rdvSuggestion = Array.isArray(rendezVous) && rendezVous.length > 0 ? rendezVous[0] : null;
+        const contactSuggestion = Array.isArray(contactsResults) && contactsResults.length > 0 ? contactsResults[0] : null;
+
+        const suggestions: any = {
+          notes: formData.notesRaw || ''
+        };
+
+        if (rdvSuggestion) {
+          suggestions.title = rdvSuggestion.description || rdvSuggestion.title || 'Visite de contrôle';
+          suggestions.person = rdvSuggestion.person || rdvSuggestion.nom || rdvSuggestion.nom_complet || '';
+          suggestions.email = rdvSuggestion.email || '';
+          suggestions.date = rdvSuggestion.date || rdvSuggestion.date_rdv || '';
+          suggestions.time = rdvSuggestion.heure || rdvSuggestion.time || '';
+          suggestions.durationMinutes = rdvSuggestion.durationMinutes || rdvSuggestion.duree || '';
+          suggestions.location = rdvSuggestion.location || rdvSuggestion.lieu || '';
+        } else if (contactSuggestion) {
+          suggestions.person = contactSuggestion.nom_complet || contactSuggestion.name || '';
+          suggestions.email = contactSuggestion.email || '';
+        } else {
+          // try to find an email inside notes as fallback
+          const emailMatch = (formData.notesRaw || '').match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          if (emailMatch) suggestions.email = emailMatch[0];
+        }
+
+        return (
+          <ActionsRapidesModal
+            isOpen={showActionsModal}
+            onClose={() => setShowActionsModal(false)}
+            onCreateRdv={(rdv) => {
+              setRendezVous(prev => [rdv, ...prev]);
+              toast.success('Rendez-vous programmé');
+            }}
+            patientName={formData.patientName}
+            patientId={formData.patientId}
+            suggestions={suggestions}
+          />
+        );
+      })()}
     </div>
   );
 }
