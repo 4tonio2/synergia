@@ -60,6 +60,7 @@ export default function E05_VisitFlow() {
   const [transmissionContent, setTransmissionContent] = useState('');
   const [showTransmissionModal, setShowTransmissionModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
+  const [actionsSuggestions, setActionsSuggestions] = useState<any | null>(null);
   const [contactsResults, setContactsResults] = useState<any[]>([]);
   const [clientFacture, setClientFacture] = useState<any | null>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -893,7 +894,110 @@ export default function E05_VisitFlow() {
           </Button>
           
           <Button
-            onClick={() => setShowActionsModal(true)}
+            onClick={async () => {
+              // Prepare suggestions from notes before opening modal
+              if (formData.notesRaw && formData.notesRaw.trim()) {
+                try {
+                  const resp = await fetch('/api/contacts/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: formData.notesRaw })
+                  });
+                  if (resp.ok) {
+                    const data = await resp.json();
+                    const persons = Array.isArray(data.persons) ? data.persons : [];
+                    const rdvs = Array.isArray(data.rendez_vous) ? data.rendez_vous : [];
+
+                    const sugg: any = {};
+
+                    // Prefer structured RDV if present
+                    if (rdvs.length) {
+                      const r = rdvs[0];
+                      // map common fields
+                      sugg.title = r.description || r.title || '';
+                      sugg.date = r.date || r.jour || '';
+                      sugg.time = r.heure || r.time || r.hour || '';
+                      sugg.notes = r.description || '';
+                    }
+
+                    if (persons.length) {
+                      const p = persons[0];
+                      sugg.person = p.nom_complet || p.name || '';
+                      sugg.email = p.email || p.mail || '';
+                    }
+
+                    // Lightweight heuristic: infer type from raw notes if not present
+                    if (!sugg.title) {
+                      const raw = formData.notesRaw.toLowerCase();
+                      if (/panseme?n?t|pansement|panser/i.test(raw)) sugg.title = 'Pansement';
+                      else if (/contr[oô]le|suivi/i.test(raw)) sugg.title = 'Visite de contrôle';
+                      else if (/consult/i.test(raw)) sugg.title = 'Consultation';
+                    }
+
+                    // Normalize date/time to HTML inputs if possible
+                    const normalizeDate = (d: string) => {
+                      if (!d) return '';
+                      // try ISO parse
+                      const parsed = Date.parse(d);
+                      if (!isNaN(parsed)) {
+                        const dt = new Date(parsed);
+                        const yyyy = dt.getFullYear();
+                        const mm = String(dt.getMonth() + 1).padStart(2, '0');
+                        const dd = String(dt.getDate()).padStart(2, '0');
+                        return `${yyyy}-${mm}-${dd}`;
+                      }
+                      // french month names
+                      const months: Record<string, number> = { janvier:1, fevrier:2, février:2, mars:3, avril:4, mai:5, juin:6, juillet:7, aout:8, août:8, septembre:9, octobre:10, novembre:11, decembre:12, décembre:12 };
+                      const m = d.toLowerCase().match(/(\d{1,2})\s*(?:er)?\s*(?:de)?\s*([a-zéûô]+)\s*(\d{4})?/i);
+                      if (m) {
+                        const day = Number(m[1]);
+                        const monthName = m[2].toLowerCase();
+                        const year = m[3] ? Number(m[3]) : (new Date()).getFullYear();
+                        const monthNum = months[monthName] || NaN;
+                        if (!isNaN(monthNum)) {
+                          const yyyy = year;
+                          const mm = String(monthNum).padStart(2,'0');
+                          const dd = String(day).padStart(2,'0');
+                          return `${yyyy}-${mm}-${dd}`;
+                        }
+                      }
+                      // fallback: dd/mm/yyyy
+                      const m2 = d.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+                      if (m2) {
+                        const day = String(Number(m2[1])).padStart(2,'0');
+                        const month = String(Number(m2[2])).padStart(2,'0');
+                        const year = m2[3] ? (m2[3].length===2 ? `20${m2[3]}` : m2[3]) : String(new Date().getFullYear());
+                        return `${year}-${month}-${day}`;
+                      }
+                      return '';
+                    };
+
+                    const normalizeTime = (t: string) => {
+                      if (!t) return '';
+                      const m = t.match(/(\d{1,2})(?:[:hH\s](\d{2}))?/);
+                      if (m) {
+                        const hh = String(Number(m[1])).padStart(2,'0');
+                        const mm = m[2] ? String(Number(m[2])).padStart(2,'0') : '00';
+                        return `${hh}:${mm}`;
+                      }
+                      return '';
+                    };
+
+                    if (sugg.date) sugg.date = normalizeDate(sugg.date);
+                    if (sugg.time) sugg.time = normalizeTime(sugg.time);
+
+                    setActionsSuggestions(sugg);
+                  }
+                } catch (error) {
+                  console.error('Erreur extraction suggestions:', error);
+                  setActionsSuggestions(null);
+                }
+              } else {
+                setActionsSuggestions(null);
+              }
+
+              setShowActionsModal(true);
+            }}
             variant="outline"
             className="w-full h-12 rounded-full"
           >
@@ -1327,7 +1431,7 @@ export default function E05_VisitFlow() {
             }}
             patientName={formData.patientName}
             patientId={formData.patientId}
-            suggestions={suggestions}
+            suggestions={actionsSuggestions || suggestions}
           />
         );
       })()}
