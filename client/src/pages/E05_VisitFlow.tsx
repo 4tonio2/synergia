@@ -1293,6 +1293,12 @@ export default function E05_VisitFlow() {
       <ActionsRapidesModal
         isOpen={showActionsModal}
         onClose={() => setShowActionsModal(false)}
+        onCreateRdv={(rdv) => {
+          setRendezVous(prev => [rdv, ...prev]);
+          toast.success('Rendez-vous programmé');
+        }}
+        patientName={formData.patientName}
+        patientId={formData.patientId}
       />
     </div>
   );

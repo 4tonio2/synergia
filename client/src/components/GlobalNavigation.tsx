@@ -93,3 +93,23 @@ export function GlobalNavigation() {
         </button>
 
         {/* Paramètres */}
+        <NavItem
+          icon={Settings}
+          label="Paramètres"
+          active={isActive('/settings')}
+          onClick={() => handleNavigate('/settings')}
+        />
+
+        {/* Boutique / commandes */}
+        <NavItem
+          icon={ShoppingCart}
+          label="Commande"
+          active={isActive('/orders')}
+          onClick={() => handleNavigate('/orders')}
+        />
+        
+        </div>
+      </div>
+    </div>
+  );
+}
