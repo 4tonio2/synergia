@@ -27,10 +27,11 @@ export default function E10_Recordings() {
 
   const handleSelectRecording = (recording: typeof enrichedRecordings[0]) => {
     if (recording.patientId) {
-      setLocation(`/patients/${recording.patientId}/visits/${recording.visitId}`);
+      // ajouter ?editable=1 pour permettre l'édition depuis la liste des enregistrements
+      setLocation(`/patients/${recording.patientId}/visits/${recording.visitId}?editable=1`);
     } else {
       // Pour les enregistrements non affectés, aller vers un écran de détail générique
-      setLocation(`/recordings/${recording.id}`);
+      setLocation(`/recordings/${recording.id}?editable=1`);
     }
   };
 
