@@ -90,11 +90,16 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
 
   // Form state pour la programmation de RDV
   const [title, setTitle] = useState('Visite de contrôle');
-  const [person, setPerson] = useState(patientName || '');
+  // If there's no patientId (free recording) or patientName indicates a free recording,
+  // do not prefill the person field so the user can enter it.
+  const initialPerson = (patientId && patientName && !String(patientName).toLowerCase().includes('enregistrement')) ? patientName : '';
+  const [person, setPerson] = useState<string>(initialPerson);
+  const [email, setEmail] = useState<string>(initialPerson && initialPerson.includes('@') ? initialPerson : '');
   const [date, setDate] = useState<string>('');
   const [time, setTime] = useState<string>('');
   const [durationMinutes, setDurationMinutes] = useState<number>(15);
-  const [location, setLocation] = useState<string>('Cabinet');
+  // Leave location empty by default (user will fill). Placeholder gives an example.
+  const [location, setLocation] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [reminderMinutes, setReminderMinutes] = useState<number>(60);
 
@@ -126,6 +131,7 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
       time,
       heure: time,
       datetimeISO,
+      email: email || null,
       durationMinutes: Number(durationMinutes) || 15,
       location,
       notes,
@@ -190,7 +196,13 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
 
                 <div>
                   <label className="text-xs text-gray-500">Adresse email</label>
-                  <Input type="email" value={( (window && (person && person.includes('@')) ) ? person : '') || ''} onChange={(e:any)=>{/*noop*/}} placeholder="ex: jean.dupont@example.com" className="mt-1" />
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e:any)=>setEmail(e.target.value)}
+                    placeholder="ex: jean.dupont@example.com"
+                    className="mt-1"
+                  />
                 </div>
 
                 <div>
@@ -210,7 +222,7 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
 
                 <div>
                   <label className="text-xs text-gray-500">Lieu</label>
-                  <Input value={location} onChange={(e:any)=>setLocation(e.target.value)} placeholder="Adresse ou lieu (ex: Cabinet, Domicile)" className="mt-1" />
+                  <Input value={location} onChange={(e:any)=>setLocation(e.target.value)} placeholder="Ex: Cabinet ou Domicile (laisser vide si non applicable)" className="mt-1" />
                 </div>
 
                 <div className="sm:col-span-2">
