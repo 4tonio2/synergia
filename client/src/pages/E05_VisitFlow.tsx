@@ -1438,8 +1438,56 @@ export default function E05_VisitFlow() {
           <ActionsRapidesModal
             isOpen={showActionsModal}
             onClose={() => setShowActionsModal(false)}
-            onCreateRdv={(rdv) => {
+            onCreateRdv={async (rdv) => {
+              // Add to local state
               setRendezVous(prev => [rdv, ...prev]);
+
+              // If an email is provided, try to send a confirmation
+              if (rdv.email) {
+                toast.info('Envoi du mail de confirmation…');
+                try {
+                  // Get Supabase session token to authorize the server endpoint
+                  const sessionResp = await fetch('/api/auth/user', { method: 'GET' });
+                  // Try to get access token from Supabase client if available
+                  let accessToken: string | null = null;
+                  try {
+                    // dynamic import of supabase client to avoid top-level import noise
+                    const { supabase } = await import('@/lib/supabase');
+                    const { data } = await supabase.auth.getSession();
+                    accessToken = data.session?.access_token ?? null;
+                  } catch (e) {
+                    console.warn('Impossible de récupérer le token Supabase localement:', e);
+                  }
+
+                  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+                  const resp = await fetch('/api/notifications/send-email', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                      to: rdv.email,
+                      subject: `Confirmation de rendez-vous — ${rdv.title}`,
+                      text: `Bonjour ${rdv.person || ''},\n\nVotre rendez-vous "${rdv.title}" est programmé le ${rdv.date} à ${rdv.time}.\nLieu: ${rdv.location || 'À préciser'}.\nDurée: ${rdv.durationMinutes} minutes.\n\nNotes: ${rdv.notes || '-'}\n\nCordialement,\nL'équipe`,
+                      html: `<p>Bonjour ${rdv.person || ''},</p><p>Votre rendez-vous "<strong>${rdv.title}</strong>" est programmé le <strong>${rdv.date}</strong> à <strong>${rdv.time}</strong>.</p><p><strong>Lieu:</strong> ${rdv.location || 'À préciser'}<br/><strong>Durée:</strong> ${rdv.durationMinutes} minutes</p><p><strong>Notes:</strong> ${rdv.notes || '-'}</p><p>Cordialement,<br/>L'équipe</p>`
+                    })
+                  });
+
+                  if (resp.ok) {
+                    const json = await resp.json().catch(() => ({}));
+                    toast.success('Email de confirmation envoyé');
+                    console.log('Send-email response:', json);
+                  } else {
+                    const err = await resp.json().catch(() => ({}));
+                    toast.error('Impossible d\'envoyer l\'email de confirmation');
+                    console.error('Send-email failed', resp.status, err);
+                  }
+                } catch (error) {
+                  toast.error('Erreur lors de l\'envoi de l\'email');
+                  console.error('Error sending confirmation email:', error);
+                }
+              }
+              // already shown toasts above for email; show general success for RDV
               toast.success('Rendez-vous programmé');
             }}
             patientName={formData.patientName}

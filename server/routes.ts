@@ -10,6 +10,7 @@ import OpenAI from "openai";
 import fs from "fs";
 import xmlrpc from "xmlrpc";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { sendEmail } from "./email";
 
 // Configure multer for file uploads (store in memory)
 const upload = multer({ 
@@ -907,8 +908,8 @@ Génère une transmission médicale structurée pour le médecin traitant.`
           details: embError.message,
         });
       }
-
-      // 4. Upsert dans Supabase
+      
+      // continue: 4. Upsert dans Supabase
       try {
         if (!supabaseIngestion) {
           console.error(
@@ -1089,6 +1090,27 @@ Génère une transmission médicale structurée pour le médecin traitant.`
         error: 'Erreur interne lors de la création / ingestion du contact',
         details: error.message,
       });
+    }
+  });
+
+  // Notifications: send email helper endpoint
+  app.post('/api/notifications/send-email', isAuthenticated, async (req: any, res: Response) => {
+    try {
+      const { to, subject, text, html, from } = req.body as any;
+
+      if (!to || !subject) {
+        return res.status(400).json({ error: 'to and subject are required' });
+      }
+
+      const result = await sendEmail({ to, subject, text, html, from });
+      if (!result || !result.success) {
+        return res.status(500).json({ success: false, error: result });
+      }
+
+      res.json({ success: true, provider: result.provider, previewUrl: result.previewUrl ?? null });
+    } catch (error: any) {
+      console.error('[NOTIFICATIONS] send-email error:', error);
+      res.status(500).json({ success: false, error: error?.message || String(error) });
     }
   });
 
