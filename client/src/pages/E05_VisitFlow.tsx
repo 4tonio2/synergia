@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useRoute } from 'wouter';
 import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search, Pencil, Check, X, Mic, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -68,6 +68,9 @@ export default function E05_VisitFlow() {
   // État pour l'édition des contacts
   const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
   const [editingContactData, setEditingContactData] = useState<Record<string, string>>({});
+  // Dernier contact retiré (pour permettre un undo temporaire)
+  const [lastRemovedContact, setLastRemovedContact] = useState<{ contact: any; index: number } | null>(null);
+  const removalTimerRef = useRef<number | null>(null);
   
   // États pour l'enregistrement vocal
   const [isRecording, setIsRecording] = useState(false);
@@ -452,6 +455,47 @@ export default function E05_VisitFlow() {
     setEditingContactIndex(null);
     setEditingContactData({});
     toast.success('Contact modifié avec succès');
+  };
+
+  // Retirer un contact de la vue (non-destructif côté serveur)
+  const handleRemoveContact = (index: number) => {
+    const toRemove = contactsResults[index];
+    if (!toRemove) return;
+
+    // Petite confirmation pour éviter les clics accidentels
+    if (!window.confirm('Retirer ce contact de la vue ? (action non destructive, vous pouvez annuler)')) {
+      return;
+    }
+
+    setContactsResults(prev => prev.filter((_, i) => i !== index));
+    setLastRemovedContact({ contact: toRemove, index });
+    toast.success('Contact retiré de la vue');
+
+    // Nettoyage automatique du banner d'annulation après 8s
+    if (removalTimerRef.current) {
+      window.clearTimeout(removalTimerRef.current);
+    }
+    removalTimerRef.current = window.setTimeout(() => {
+      setLastRemovedContact(null);
+      removalTimerRef.current = null;
+    }, 8000) as unknown as number;
+  };
+
+  const handleUndoRemove = () => {
+    if (!lastRemovedContact) return;
+    setContactsResults(prev => {
+      const newArr = [...prev];
+      // Réinsérer à l'index d'origine (ou à la fin si l'index est trop grand)
+      const insertIndex = Math.min(Math.max(0, lastRemovedContact.index), newArr.length);
+      newArr.splice(insertIndex, 0, lastRemovedContact.contact);
+      return newArr;
+    });
+    setLastRemovedContact(null);
+    if (removalTimerRef.current) {
+      window.clearTimeout(removalTimerRef.current);
+      removalTimerRef.current = null;
+    }
+    toast.success('Contact rétabli');
   };
 
   const handleEditFieldChange = (key: string, value: string) => {
@@ -1040,6 +1084,26 @@ export default function E05_VisitFlow() {
               Contacts détectés ({contactsResults.length})
             </h3>
             <div className="space-y-3">
+              {lastRemovedContact && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-1 flex items-center justify-between">
+                  <div className="text-sm text-yellow-800">Contact retiré de la vue</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleUndoRemove}
+                      className="text-sm px-3 py-1 bg-white border border-yellow-200 rounded-md text-yellow-800"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={() => setLastRemovedContact(null)}
+                      className="text-sm px-3 py-1 bg-transparent text-gray-600"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {contactsResults.map((person, index) => {
                 const isEditing = editingContactIndex === index;
                 const reconnu = person.reconnu === true;
@@ -1127,6 +1191,15 @@ export default function E05_VisitFlow() {
                           title="Modifier"
                         >
                           <Pencil className="w-4 h-4" />
+                        </button>
+
+                        {/* Bouton Retirer (UI only) */}
+                        <button
+                          onClick={() => handleRemoveContact(index)}
+                          className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg"
+                          title="Retirer de la vue"
+                        >
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
