@@ -90,6 +90,9 @@ export default function E09_VisitDetail() {
     allowEditFromHistory = location.includes('editable=1') || location.includes('editable=true');
   }
 
+  // Si on est sur la route d'un enregistrement non affecté (/recordings/:id), autoriser l'édition aussi
+  const isRecordingRoute = Boolean(recordingParams);
+
   const handleDeleteVisit = async () => {
     const confirmed = await confirm(
       "Êtes-vous sûr de vouloir supprimer cet enregistrement ? Cette action est irréversible.",
@@ -308,8 +311,9 @@ export default function E09_VisitDetail() {
             <Button 
               className="w-full h-12 font-semibold"
               onClick={() => setIsEditing(true)}
-              // Autoriser l'édition si la visite n'est pas validée, ou si on vient de l'historique
-              disabled={visit.validated && !allowEditFromHistory}
+              // Autoriser l'édition si la visite n'est pas validée, ou si on vient de l'historique,
+              // ou si on visualise un enregistrement non affecté (/recordings/:id)
+              disabled={visit.validated && !(allowEditFromHistory || isRecordingRoute)}
             >
               {visit.validated ? (
                 <><FileText className="mr-2" size={20} /> Modifier le rapport</>
