@@ -1094,20 +1094,43 @@ Génère une transmission médicale structurée pour le médecin traitant.`
   });
 
   // Notifications: send email helper endpoint
-  app.post('/api/notifications/send-email', isAuthenticated, async (req: any, res: Response) => {
+  app.post('/api/notifications/send-email', async (req: any, res: Response) => {
     try {
       const { to, subject, text, html, from } = req.body as any;
+
+      console.log('[NOTIFICATIONS] send-email called', { to, subject, from: from || null, env: process.env.NODE_ENV });
 
       if (!to || !subject) {
         return res.status(400).json({ error: 'to and subject are required' });
       }
 
+      // In production, require authentication
+      if (process.env.NODE_ENV === 'production') {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          console.warn('[NOTIFICATIONS] Missing Authorization header in production');
+          return res.status(401).json({ error: 'Unauthorized: token required' });
+        }
+
+        const token = authHeader.substring(7);
+        const user = await getUserFromToken(token);
+        if (!user) {
+          console.warn('[NOTIFICATIONS] Invalid token in production');
+          return res.status(401).json({ error: 'Unauthorized: invalid token' });
+        }
+      } else {
+        // Dev mode: allow unauthenticated calls but log a warning
+        console.log('[NOTIFICATIONS] Dev mode - accepting unauthenticated send-email request');
+      }
+
       const result = await sendEmail({ to, subject, text, html, from });
+      console.log('[NOTIFICATIONS] sendEmail result:', result);
+
       if (!result || !result.success) {
         return res.status(500).json({ success: false, error: result });
       }
 
-      res.json({ success: true, provider: result.provider, previewUrl: result.previewUrl ?? null });
+      return res.json({ success: true, provider: result.provider, previewUrl: result.previewUrl ?? null });
     } catch (error: any) {
       console.error('[NOTIFICATIONS] send-email error:', error);
       res.status(500).json({ success: false, error: error?.message || String(error) });

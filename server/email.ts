@@ -9,56 +9,41 @@ type SendEmailArgs = {
 };
 
 export async function sendEmail({ to, from, subject, text, html }: SendEmailArgs) {
-  // If SENDGRID_API_KEY is present, use SendGrid HTTP API (no extra dependency)
-  const sendgridKey = process.env.SENDGRID_API_KEY;
-  if (sendgridKey) {
+  // Prefer SMTP if configured (avoid SendGrid per request)
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : undefined;
+  const smtpSecure = process.env.SMTP_SECURE === "true";
+
+  if (smtpHost && smtpUser && smtpPass) {
     try {
-      const payload: any = {
-        personalizations: [
-          {
-            to: Array.isArray(to) ? to.map((t) => ({ email: t })) : [{ email: to }],
-            subject,
-          },
-        ],
-        from: {
-          email: from || process.env.SENDGRID_DEFAULT_FROM || "no-reply@example.com",
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort || 587,
+        secure: smtpSecure || false,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
         },
-        content: [],
-      };
-
-      if (html) {
-        payload.content.push({ type: "text/html", value: html });
-      }
-      if (text) {
-        payload.content.push({ type: "text/plain", value: text });
-      }
-
-      const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${sendgridKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        return {
-          success: false,
-          provider: "sendgrid",
-          status: res.status,
-          error: body || `SendGrid returned status ${res.status}`,
-        };
-      }
+      const info = await transporter.sendMail({
+        from: from || process.env.SMTP_DEFAULT_FROM || `no-reply@${smtpHost}`,
+        to: Array.isArray(to) ? to.join(", ") : to,
+        subject,
+        text: text || undefined,
+        html: html || undefined,
+      });
 
-      return { success: true, provider: "sendgrid" };
+      return { success: true, provider: "smtp", info };
     } catch (error: any) {
-      return { success: false, provider: "sendgrid", error: error?.message || String(error) };
+      console.error('[EMAIL] SMTP send error:', error);
+      return { success: false, provider: "smtp", error: error?.message || String(error) };
     }
   }
 
-  // Fallback: create Ethereal test account (nodemailer) for dev
+  // Fallback: Ethereal for development
   try {
     const testAccount = await nodemailer.createTestAccount();
 
@@ -82,6 +67,7 @@ export async function sendEmail({ to, from, subject, text, html }: SendEmailArgs
     const previewUrl = nodemailer.getTestMessageUrl(info);
     return { success: true, provider: "ethereal", previewUrl, info };
   } catch (error: any) {
+    console.error('[EMAIL] Ethereal send error:', error);
     return { success: false, provider: "ethereal", error: error?.message || String(error) };
   }
 }

@@ -47,6 +47,21 @@ export interface Visit {
   validated: boolean;
 }
 
+export interface RendezVous {
+  id: string;
+  title: string;
+  person?: string | null;
+  patientId?: string | null;
+  patientName?: string | null;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  datetimeISO?: string;
+  email?: string | null;
+  durationMinutes?: number;
+  location?: string;
+  notes?: string;
+}
+
 export interface SystemAlert {
   id: string;
   title: string;
@@ -180,6 +195,7 @@ const INITIAL_ALERTS: SystemAlert[] = [
 interface AppContextType {
   patients: Patient[];
   visits: Visit[];
+  rendezvous: RendezVous[];
   alerts: SystemAlert[];
   
   getPatientById: (id: string) => Patient | undefined;
@@ -190,6 +206,9 @@ interface AppContextType {
   deleteVisit: (visitId: string) => void;
   getVisitById: (id: string) => Visit | undefined;
   getVisitsByPatientId: (patientId: string) => Visit[];
+  // Rendez-vous helpers
+  addRendezVous: (rdv: RendezVous) => void;
+  getRendezVousByPatientId: (patientId: string) => RendezVous[];
   
   markAlertAsRead: (alertId: string) => void;
   addAlert: (alert: SystemAlert) => void;
@@ -228,12 +247,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   const [patients, setPatients] = useState<Patient[]>(stored?.patients || INITIAL_PATIENTS);
   const [visits, setVisits] = useState<Visit[]>(stored?.visits || INITIAL_VISITS);
+  const [rendezvous, setRendezvous] = useState<RendezVous[]>(stored?.rendezvous || []);
   const [alerts, setAlerts] = useState<SystemAlert[]>(stored?.alerts || INITIAL_ALERTS);
 
   // Save to localStorage whenever data changes
   useEffect(() => {
-    saveToStorage({ patients, visits, alerts });
-  }, [patients, visits, alerts]);
+    saveToStorage({ patients, visits, rendezvous, alerts });
+  }, [patients, visits, rendezvous, alerts]);
 
   const getPatientById = (id: string) => {
     return patients.find(p => p.id === id);
@@ -249,6 +269,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setVisits(prev => [...prev, visit]);
   };
 
+  const addRendezVous = (rdv: RendezVous) => {
+    setRendezvous(prev => [...prev, rdv]);
+  };
+
   const updateVisit = (visitId: string, visitUpdate: Partial<Visit>) => {
     setVisits(prev => prev.map(v =>
       v.id === visitId ? { ...v, ...visitUpdate } : v
@@ -261,6 +285,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const getVisitById = (id: string) => {
     return visits.find(v => v.id === id);
+  };
+
+  const getRendezVousByPatientId = (patientId: string) => {
+    return rendezvous.filter(r => r.patientId === patientId);
   };
 
   const getVisitsByPatientId = (patientId: string) => {
@@ -281,11 +309,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPatients(INITIAL_PATIENTS);
     setVisits(INITIAL_VISITS);
     setAlerts(INITIAL_ALERTS);
+    setRendezvous([]);
   };
 
   const value: AppContextType = {
     patients,
     visits,
+    rendezvous,
     alerts,
     getPatientById,
     updatePatientConsent,
@@ -294,6 +324,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     deleteVisit,
     getVisitById,
     getVisitsByPatientId,
+    addRendezVous,
+    getRendezVousByPatientId,
     markAlertAsRead,
     addAlert,
     resetData,

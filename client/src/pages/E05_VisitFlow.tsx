@@ -32,7 +32,7 @@ export default function E05_VisitFlow() {
   const [, patientParams] = useRoute('/patients/:id/record');
   const [, freeParams] = useRoute('/recordings/new-free');
   
-  const { getPatientById, addVisit, updateVisit } = useAppStore();
+  const { getPatientById, addVisit, updateVisit, addRendezVous } = useAppStore();
   const toast = useCustomToast();
   
   // Déterminer si c'est un enregistrement patient ou libre
@@ -1439,7 +1439,12 @@ export default function E05_VisitFlow() {
             isOpen={showActionsModal}
             onClose={() => setShowActionsModal(false)}
             onCreateRdv={async (rdv) => {
-              // Add to local state
+              // Persist RDV to global store and keep local list for immediate UI
+              try {
+                addRendezVous(rdv);
+              } catch (e) {
+                console.warn('addRendezVous failed', e);
+              }
               setRendezVous(prev => [rdv, ...prev]);
 
               // If an email is provided, try to send a confirmation
