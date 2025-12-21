@@ -13,7 +13,7 @@ export default function E09_VisitDetail() {
   const [, patientParams] = useRoute('/patients/:patientId/visits/:visitId');
   const [, recordingParams] = useRoute('/recordings/:id');
   const [location, setLocation] = useLocation();
-  const { getVisitById, getPatientById, deleteVisit, updateVisit, getRendezVousByPatientId } = useAppStore();
+  const { getVisitById, getPatientById, deleteVisit, updateVisit, getRendezVousByPatientId, rendezvous } = useAppStore();
   const { confirm } = useConfirmDialog();
   const toast = useCustomToast();
   
@@ -296,41 +296,44 @@ export default function E09_VisitDetail() {
           </div>
         )}
 
-        {/* Rendez-vous associés au patient */}
-        {displayPatient?.id && (
-          (() => {
-            const rdvs = getRendezVousByPatientId(displayPatient.id);
-            if (!rdvs || rdvs.length === 0) return null;
+        {/* Rendez-vous associés (patient ou enregistrements non affectés) */}
+        {(() => {
+          // If this visit is linked to a patient, show RDV for that patient
+          // Otherwise (free recording), show RDV with no patientId (created during free recordings)
+          const rdvs = visit?.patientId
+            ? getRendezVousByPatientId(visit.patientId)
+            : (rendezvous || []).filter((r) => !r.patientId);
 
-            return (
-              <div className="mb-6 p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                <h3 className="text-lg font-bold mb-3">Rendez‑vous liés ({rdvs.length})</h3>
-                <div className="space-y-3">
-                  {rdvs.map((r) => (
-                    <div key={r.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="text-sm font-semibold text-gray-800">{r.title}</div>
-                          <div className="text-xs text-gray-500">{r.person ? `${r.person} · ` : ''}{r.date} {r.time}</div>
-                        </div>
-                        <div className="text-right text-xs text-gray-500">
-                          {r.location && <div>{r.location}</div>}
-                          {r.durationMinutes ? <div>{r.durationMinutes} min</div> : null}
-                        </div>
+          if (!rdvs || rdvs.length === 0) return null;
+
+          return (
+            <div className="mb-6 p-4 bg-white rounded-xl shadow-md border border-gray-100">
+              <h3 className="text-lg font-bold mb-3">Rendez‑vous liés ({rdvs.length})</h3>
+              <div className="space-y-3">
+                {rdvs.map((r) => (
+                  <div key={r.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-800">{r.title}</div>
+                        <div className="text-xs text-gray-500">{r.person ? `${r.person} · ` : ''}{r.date} {r.time}</div>
                       </div>
-                      {r.notes && <p className="mt-2 text-sm text-gray-700">{r.notes}</p>}
-                      {r.email && (
-                        <div className="mt-2 flex items-center gap-2 text-xs">
-                          <a href={`mailto:${r.email}`} className="text-blue-600 underline">{r.email}</a>
-                        </div>
-                      )}
+                      <div className="text-right text-xs text-gray-500">
+                        {r.location && <div>{r.location}</div>}
+                        {r.durationMinutes ? <div>{r.durationMinutes} min</div> : null}
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    {r.notes && <p className="mt-2 text-sm text-gray-700">{r.notes}</p>}
+                    {r.email && (
+                      <div className="mt-2 flex items-center gap-2 text-xs">
+                        <a href={`mailto:${r.email}`} className="text-blue-600 underline">{r.email}</a>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            );
-          })()
-        )}
+            </div>
+          );
+        })()}
 
         {/* Actions */}
         <div className="space-y-3">
