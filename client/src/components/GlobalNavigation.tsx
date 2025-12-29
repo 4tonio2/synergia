@@ -41,6 +41,11 @@ export function GlobalNavigation() {
     return null;
   }
 
+  // Cacher complètement la navigation si pas authentifié
+  if (!isAuthenticated) {
+    return null;
+  }
+
   if (shouldHide) {
     return null;
   }
