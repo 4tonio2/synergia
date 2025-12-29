@@ -104,8 +104,8 @@ export function GlobalNavigation() {
         <NavItem
           icon={ShoppingCart}
           label="Commande"
-          active={isActive('/orders')}
-          onClick={() => handleNavigate('/orders')}
+          active={isActive('/shop')}
+          onClick={() => handleNavigate('/shop')}
         />
         
         </div>
