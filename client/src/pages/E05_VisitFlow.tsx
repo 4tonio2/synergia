@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search, Pencil, Check, X, Mic, Square } from 'lucide-react';
+import { ArrowLeft, Sparkles, Send, Zap, Loader2, Search, Pencil, Check, X, Mic, Square, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { PhotoUploader } from '@/components/PhotoUploader';
 import { TransmissionModal, ActionsRapidesModal } from '@/components/Modal';
+import { AgendaCallModal } from '@/components/AgendaCallModal';
 import { useAppStore } from '@/lib/appStore';
 import { useCustomToast } from '@/hooks/useToast';
 import { PrescriptionsResponse, ObservationsResponse } from '@/types/webhook-responses';
@@ -86,6 +87,9 @@ export default function E05_VisitFlow() {
   const [prescriptionsResults, setPrescriptionsResults] = useState<PrescriptionsResponse | null>(null);
   const [observationsResults, setObservationsResults] = useState<ObservationsResponse | null>(null);
   const [isLoadingWebhook, setIsLoadingWebhook] = useState(false);
+
+  // État pour le modal Agenda
+  const [showAgendaModal, setShowAgendaModal] = useState(false);
   
   // DEBUG: Tracer les changements d'état
   useEffect(() => {
@@ -1036,6 +1040,15 @@ export default function E05_VisitFlow() {
               </>
             )}
           </Button>
+
+          <Button
+            onClick={() => setShowAgendaModal(true)}
+            variant="outline"
+            className="w-full h-12 rounded-full"
+          >
+            <Calendar className="w-5 h-5 mr-2" />
+            Agenda
+          </Button>
         </div>
 
         {/* Loader overlay pendant l'extraction */}
@@ -1501,6 +1514,18 @@ export default function E05_VisitFlow() {
           />
         );
       })()}
+
+      {/* Modal Agenda - IVR WebRTC */}
+      <AgendaCallModal
+        isOpen={showAgendaModal}
+        onClose={() => setShowAgendaModal(false)}
+        onAppointmentCreated={(appointment) => {
+          // Ajouter le rendez-vous extrait par l'IVR
+          addRendezVous(appointment);
+          setRendezVous(prev => [appointment, ...prev]);
+          toast.success(`RDV ajouté: ${appointment.person} le ${appointment.date}`);
+        }}
+      />
     </div>
   );
 }
