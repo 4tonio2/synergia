@@ -72,10 +72,11 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
         setIsCreatingContact(index);
 
         try {
-            const response = await fetch('/api/agenda/create-contact', {
+            const response = await fetch('/api/agenda', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    action: 'create-contact',
                     name: contactForm.name || participant.proposed_contact.name,
                     email: contactForm.email || null,
                     phone: contactForm.phone || null,
@@ -158,10 +159,11 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
         setIsConfirming(true);
 
         try {
-            const response = await fetch('/api/agenda/confirm', {
+            const response = await fetch('/api/agenda', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    action: 'confirm',
                     event: localPayload.event,
                     participants: localPayload.participants,
                 }),
@@ -288,10 +290,10 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
                                     <div
                                         key={index}
                                         className={`border rounded-xl p-3 text-sm ${participant.status === 'matched'
-                                                ? 'border-green-200 bg-green-50'
-                                                : participant.status === 'ambiguous'
-                                                    ? 'border-blue-200 bg-blue-50'
-                                                    : 'border-orange-200 bg-orange-50'
+                                            ? 'border-green-200 bg-green-50'
+                                            : participant.status === 'ambiguous'
+                                                ? 'border-blue-200 bg-blue-50'
+                                                : 'border-orange-200 bg-orange-50'
                                             }`}
                                     >
                                         <div className="flex justify-between items-start">

@@ -69,12 +69,12 @@ export function VoiceRecorderButton({ onTranscription, isDisabled = false }: Voi
     try {
       // Demander l'accès au microphone
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
+
       // Créer le MediaRecorder
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus'
       });
-      
+
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -87,37 +87,37 @@ export function VoiceRecorderButton({ onTranscription, isDisabled = false }: Voi
       mediaRecorder.onstop = async () => {
         // Arrêter tous les tracks du stream
         stream.getTracks().forEach(track => track.stop());
-        
+
         // Envoyer l'audio vers OpenAI Whisper
         setIsProcessing(true);
-        
+
         try {
           const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
           const formData = new FormData();
           formData.append('audio', audioBlob, 'recording.webm');
-          
+
           console.log('[VOICE] Envoi de l\'audio vers Whisper...', {
             size: audioBlob.size,
             type: audioBlob.type
           });
-          
-          const response = await fetch('/api/voice/transcribe', {
+
+          const response = await fetch('/api/voice?action=transcribe', {
             method: 'POST',
             body: formData
           });
-          
+
           if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || 'Erreur de transcription');
           }
-          
+
           const { text } = await response.json();
           console.log('[VOICE] Transcription reçue:', text);
-          
+
           // Passer à la fois le texte ET le blob audio original
           onTranscription(text, audioBlob);
           setIsProcessing(false);
-          
+
         } catch (error) {
           console.error('[VOICE] Erreur de transcription:', error);
           toast.error('Erreur lors de la transcription. Veuillez réessayer.');
@@ -127,7 +127,7 @@ export function VoiceRecorderButton({ onTranscription, isDisabled = false }: Voi
 
       mediaRecorder.start();
       setIsRecording(true);
-      
+
     } catch (error) {
       console.error('Erreur d\'accès au microphone:', error);
       toast.error('Impossible d\'accéder au microphone. Vérifiez les permissions.');
@@ -157,8 +157,8 @@ export function VoiceRecorderButton({ onTranscription, isDisabled = false }: Voi
         className={`
           w-16 h-16 rounded-full flex items-center justify-center
           transition-all duration-300 shadow-lg
-          ${isRecording 
-            ? 'bg-red-500' 
+          ${isRecording
+            ? 'bg-red-500'
             : 'bg-blue-600 hover:bg-blue-700'
           }
           ${(isDisabled || isProcessing) && 'opacity-50 cursor-not-allowed'}
@@ -172,13 +172,13 @@ export function VoiceRecorderButton({ onTranscription, isDisabled = false }: Voi
           <Mic className="w-7 h-7 text-white" />
         )}
       </button>
-      
+
       {isRecording && (
         <p className="text-sm text-red-600 font-medium">
           Enregistrement en cours...
         </p>
       )}
-      
+
       {isProcessing && (
         <p className="text-sm text-blue-600 font-medium">
           Transcription en cours...

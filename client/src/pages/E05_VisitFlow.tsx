@@ -151,7 +151,7 @@ export default function E05_VisitFlow() {
           const uploadFormData = new FormData();
           uploadFormData.append('audio', audioBlob, 'recording.webm');
 
-          const response = await fetch('/api/voice/transcribe', {
+          const response = await fetch('/api/voice?action=transcribe', {
             method: 'POST',
             body: uploadFormData
           });
@@ -289,7 +289,7 @@ export default function E05_VisitFlow() {
       let audioOriginal = undefined;
       if (formData.notesRaw && formData.notesRaw.trim().length > 0) {
         console.log('[TTS] Génération audio de la transcription complète...');
-        const ttsTranscriptionResponse = await fetch('/api/voice/synthesize', {
+        const ttsTranscriptionResponse = await fetch('/api/voice?action=synthesize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: formData.notesRaw.trim() })
@@ -303,10 +303,11 @@ export default function E05_VisitFlow() {
       }
 
       // 2. Appel API pour générer le résumé avec GPT-4
-      const response = await fetch('/api/ai/summary', {
+      const response = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'summary',
           patientName: formData.patientName,
           patientAge: formData.patientAge,
           visitType: formData.visitType,
@@ -323,7 +324,7 @@ export default function E05_VisitFlow() {
 
       // 3. Générer le TTS du résumé
       console.log('[TTS] Génération audio du résumé...');
-      const ttsResponse = await fetch('/api/voice/synthesize', {
+      const ttsResponse = await fetch('/api/voice?action=synthesize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: summary })
@@ -356,10 +357,11 @@ export default function E05_VisitFlow() {
 
     try {
       // Appel API pour générer la transmission avec GPT-4
-      const response = await fetch('/api/ai/transmission', {
+      const response = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'transmission',
           patientName: formData.patientName,
           patientAge: formData.patientAge,
           visitType: formData.visitType,
@@ -399,10 +401,10 @@ export default function E05_VisitFlow() {
     setRendezVous([]);
 
     try {
-      const response = await fetch('/api/contacts/search', {
+      const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: formData.notesRaw }),
+        body: JSON.stringify({ action: 'search', text: formData.notesRaw }),
       });
 
       if (!response.ok) {
@@ -520,10 +522,11 @@ export default function E05_VisitFlow() {
 
   const handleCreateContact = async (person: any, index: number) => {
     try {
-      const response = await fetch('/api/contacts/upsert', {
+      const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'upsert',
           person: person,
         }),
       });
@@ -606,7 +609,7 @@ export default function E05_VisitFlow() {
       if (!audioOriginal && formData.notesRaw && formData.notesRaw.trim().length > 0) {
         try {
           console.log('[TTS] Génération audio de la transcription avant validation...');
-          const ttsResponse = await fetch('/api/voice/synthesize', {
+          const ttsResponse = await fetch('/api/voice?action=synthesize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: formData.notesRaw.trim() })
@@ -903,10 +906,10 @@ export default function E05_VisitFlow() {
                 // Prepare suggestions from notes before opening modal
                 if (formData.notesRaw && formData.notesRaw.trim()) {
                   try {
-                    const resp = await fetch('/api/contacts/search', {
+                    const resp = await fetch('/api/contacts', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ text: formData.notesRaw })
+                      body: JSON.stringify({ action: 'search', text: formData.notesRaw })
                     });
                     if (resp.ok) {
                       const data = await resp.json();
@@ -1044,10 +1047,10 @@ export default function E05_VisitFlow() {
               onClick={async () => {
                 setIsPreparingAgenda(true);
                 try {
-                  const resp = await fetch('/api/agenda/prepare', {
+                  const resp = await fetch('/api/agenda', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: formData.notesRaw })
+                    body: JSON.stringify({ action: 'prepare', text: formData.notesRaw })
                   });
                   if (!resp.ok) {
                     throw new Error('Erreur lors de la préparation de l\'agenda');
@@ -1488,7 +1491,7 @@ export default function E05_VisitFlow() {
                 toast.info('Envoi du mail de confirmation…');
                 try {
                   // Get Supabase session token to authorize the server endpoint
-                  const sessionResp = await fetch('/api/auth/user', { method: 'GET' });
+                  const sessionResp = await fetch('/api/auth?action=user', { method: 'GET' });
                   // Try to get access token from Supabase client if available
                   let accessToken: string | null = null;
                   try {

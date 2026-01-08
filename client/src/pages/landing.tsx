@@ -36,7 +36,7 @@ export default function Landing() {
         setLocation("/");
       }
     };
-    
+
     applyRoleAfterOAuth();
   }, [setLocation]);
 
@@ -65,7 +65,7 @@ export default function Landing() {
     try {
       // Store selected role in localStorage before auth
       localStorage.setItem("pendingMedicalRole", selectedRole);
-      
+
       let result;
       if (isSignUp) {
         // Sign up new user
@@ -84,8 +84,8 @@ export default function Landing() {
       const { data, error: authError } = result;
 
       if (authError) {
-        setError(authError.message === "Invalid login credentials" 
-          ? "Email ou mot de passe incorrect" 
+        setError(authError.message === "Invalid login credentials"
+          ? "Email ou mot de passe incorrect"
           : authError.message);
         setIsLoading(false);
         return;
@@ -94,10 +94,10 @@ export default function Landing() {
       if (data.user) {
         // Apply the pending role and wait for it
         await applyPendingRole(data.session?.access_token);
-        
+
         // Give a small delay for the database to update
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         // Redirect to home
         setLocation("/");
       }
@@ -118,7 +118,7 @@ export default function Landing() {
     try {
       // Store selected role in localStorage before OAuth redirect
       localStorage.setItem("pendingMedicalRole", selectedRole);
-      
+
       const { error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -136,18 +136,18 @@ export default function Landing() {
 
   const applyPendingRole = async (accessToken?: string) => {
     const pendingRole = localStorage.getItem("pendingMedicalRole");
-    
+
     if (pendingRole && accessToken) {
       try {
-        const response = await fetch("/api/auth/apply-pending-role", {
+        const response = await fetch("/api/auth", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${accessToken}`,
           },
-          body: JSON.stringify({ medicalRole: pendingRole }),
+          body: JSON.stringify({ action: "apply-pending-role", medicalRole: pendingRole }),
         });
-        
+
         if (response.ok) {
           localStorage.removeItem("pendingMedicalRole");
           return true;
@@ -197,7 +197,7 @@ export default function Landing() {
               {MEDICAL_ROLES.map((role) => {
                 const Icon = role.icon;
                 const isSelected = selectedRole === role.value;
-                
+
                 return (
                   <button
                     key={role.value}
@@ -211,10 +211,9 @@ export default function Landing() {
                       flex flex-col items-center justify-center gap-2 py-4 px-3
                       border-2 rounded-lg transition-all duration-200
                       hover-elevate active-elevate-2
-                      ${
-                        isSelected
-                          ? "border-primary bg-primary/5 font-semibold text-primary"
-                          : "border-border bg-card text-card-foreground hover:border-primary/50"
+                      ${isSelected
+                        ? "border-primary bg-primary/5 font-semibold text-primary"
+                        : "border-border bg-card text-card-foreground hover:border-primary/50"
                       }
                     `}
                     aria-pressed={isSelected}
@@ -293,8 +292,8 @@ export default function Landing() {
               }}
               className="text-sm text-muted-foreground hover:text-primary transition-colors"
             >
-              {isSignUp 
-                ? "Vous avez déjà un compte ? Se connecter" 
+              {isSignUp
+                ? "Vous avez déjà un compte ? Se connecter"
                 : "Pas encore de compte ? S'inscrire"}
             </button>
           </div>
