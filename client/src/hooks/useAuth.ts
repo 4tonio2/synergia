@@ -12,21 +12,21 @@ export function useAuth() {
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSupabaseUser(session?.user ?? null);
-      
+
       if (session?.user) {
         // Fetch user profile from our database
-        const response = await fetch('/api/auth/user', {
+        const response = await fetch('/api/auth?action=user', {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
         });
-        
+
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
         }
       }
-      
+
       setIsLoading(false);
     });
 
@@ -35,15 +35,15 @@ export function useAuth() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSupabaseUser(session?.user ?? null);
-      
+
       if (session?.user) {
         // Fetch user profile from our database
-        const response = await fetch('/api/auth/user', {
+        const response = await fetch('/api/auth?action=user', {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
         });
-        
+
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
@@ -51,7 +51,7 @@ export function useAuth() {
       } else {
         setUser(undefined);
       }
-      
+
       setIsLoading(false);
     });
 
@@ -61,17 +61,19 @@ export function useAuth() {
   const logout = async () => {
     try {
       // Appeler l'API backend pour nettoyer la session côté serveur
-      await fetch('/api/auth/logout', {
+      await fetch('/api/auth', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
         credentials: 'include'
       });
     } catch (error) {
       console.error('Erreur lors de l\'appel API logout:', error);
     }
-    
+
     // Déconnecter de Supabase
     await supabase.auth.signOut();
-    
+
     // Rediriger vers la page de connexion
     window.location.href = '/';
   };
