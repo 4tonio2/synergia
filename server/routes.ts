@@ -11,9 +11,10 @@ import fs from "fs";
 import xmlrpc from "xmlrpc";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "./email";
+import { prepareAgendaEvent, OdooParticipant } from "./agendaService";
 
 // Configure multer for file uploads (store in memory)
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB max (Whisper limit)
 });
@@ -186,14 +187,14 @@ async function createOdooContactFromPerson(person: any): Promise<number> {
 async function isAuthenticated(req: any, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: "Unauthorized: No token provided" });
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     const user = await getUserFromToken(token);
-    
+
     if (!user) {
       return res.status(401).json({ message: "Unauthorized: Invalid token" });
     }
@@ -213,21 +214,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const pendingRole = req.body.medicalRole;
-      
+
       console.log("[APPLY-PENDING-ROLE] userId:", userId, "pendingRole:", pendingRole);
 
       if (pendingRole && ["infirmier", "medecin", "kinesitherapeute", "aidant_pro"].includes(pendingRole)) {
         console.log("[APPLY-PENDING-ROLE] Updating user role to:", pendingRole);
-        
+
         // Check if user exists, if not create them
         let user = await storage.getUser(userId);
-        
+
         if (!user) {
           // Extract user data from Supabase metadata
           const metadata = req.user.user_metadata || {};
           const fullName = metadata.full_name || metadata.name || '';
           const nameParts = fullName.split(' ');
-          
+
           // Create user from Supabase data
           await storage.upsertUser({
             id: userId,
@@ -237,26 +238,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             profileImageUrl: metadata.avatar_url || metadata.picture || null,
           });
         }
-        
+
         // Update role
         const updatedUser = await storage.updateUserRole(userId, { medicalRole: pendingRole });
         console.log("[APPLY-PENDING-ROLE] User updated:", updatedUser);
-        
+
         // Log successful login with role
         await logAuthEvent(userId, "login", req, { medicalRole: pendingRole });
-        
+
         return res.json(updatedUser);
       } else {
         console.log("[APPLY-PENDING-ROLE] No pending role or invalid role");
         // Just ensure user exists
         let user = await storage.getUser(userId);
-        
+
         if (!user) {
           // Extract user data from Supabase metadata
           const metadata = req.user.user_metadata || {};
           const fullName = metadata.full_name || metadata.name || '';
           const nameParts = fullName.split(' ');
-          
+
           await storage.upsertUser({
             id: userId,
             email: req.user.email,
@@ -266,7 +267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           user = await storage.getUser(userId);
         }
-        
+
         await logAuthEvent(userId, "login", req);
         return res.json(user);
       }
@@ -280,21 +281,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', async (req: any, res) => {
     try {
       const authHeader = req.headers.authorization;
-      
+
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.json(null);
       }
 
       const token = authHeader.substring(7);
       const supabaseUser = await getUserFromToken(token);
-      
+
       if (!supabaseUser) {
         return res.json(null);
       }
 
       const userId = supabaseUser.id;
       let user = await storage.getUser(userId);
-      
+
       // Extract user data from Supabase metadata
       const metadata = supabaseUser.user_metadata || {};
       const fullName = metadata.full_name || metadata.name || '';
@@ -302,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const extractedFirstName = metadata.given_name || nameParts[0] || null;
       const extractedLastName = metadata.family_name || nameParts.slice(1).join(' ') || null;
       const extractedProfileUrl = metadata.avatar_url || metadata.picture || null;
-      
+
       // If user doesn't exist in our DB, create them
       if (!user) {
         await storage.upsertUser({
@@ -315,19 +316,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.getUser(userId);
       } else {
         // Update user info if they're missing or different from Google data
-        const needsUpdate = 
+        const needsUpdate =
           (!user.firstName && extractedFirstName) ||
           (!user.lastName && extractedLastName) ||
           (!user.profileImageUrl && extractedProfileUrl) ||
           (extractedProfileUrl && user.profileImageUrl !== extractedProfileUrl);
-        
+
         if (needsUpdate) {
           await storage.updateUserProfile(userId, {
             firstName: extractedFirstName || user.firstName,
             lastName: extractedLastName || user.lastName,
             medicalRole: user.medicalRole as "infirmier" | "medecin" | "kinesitherapeute" | "aidant_pro" | undefined,
           });
-          
+
           // Update profile image separately if needed
           if (extractedProfileUrl && user.profileImageUrl !== extractedProfileUrl) {
             await storage.upsertUser({
@@ -338,11 +339,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               profileImageUrl: extractedProfileUrl,
             });
           }
-          
+
           user = await storage.getUser(userId);
         }
       }
-      
+
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -355,12 +356,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/users/role', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      
+
       // Validate request body
       const validationResult = updateUserRoleSchema.safeParse(req.body);
       if (!validationResult.success) {
         const validationError = fromZodError(validationResult.error);
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "Invalid role data",
           error: validationError.toString()
         });
@@ -370,11 +371,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedUser);
     } catch (error: any) {
       console.error("Error updating user role:", error);
-      
+
       if (error.message === "User not found") {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       res.status(500).json({ message: "Failed to update user role" });
     }
   });
@@ -384,17 +385,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const requestedUserId = req.params.id;
       const authenticatedUserId = req.user.id;
-      
+
       // Users can only update their own profile
       if (requestedUserId !== authenticatedUserId) {
         return res.status(403).json({ message: "Forbidden: You can only update your own profile" });
       }
-      
+
       // Validate request body
       const validationResult = updateUserProfileSchema.safeParse(req.body);
       if (!validationResult.success) {
         const validationError = fromZodError(validationResult.error);
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "Invalid profile data",
           error: validationError.toString()
         });
@@ -406,7 +407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newRole = validationResult.data.medicalRole;
 
       const updatedUser = await storage.updateUserProfile(authenticatedUserId, validationResult.data);
-      
+
       // Log profile update
       const metadata: Record<string, any> = {};
       if (newRole && newRole !== oldRole) {
@@ -416,15 +417,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         await logAuthEvent(authenticatedUserId, "profile_update", req, validationResult.data);
       }
-      
+
       res.json(updatedUser);
     } catch (error: any) {
       console.error("Error updating user profile:", error);
-      
+
       if (error.message === "User not found") {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       res.status(500).json({ message: "Failed to update user profile" });
     }
   });
@@ -444,7 +445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================
   // AI ACTIONS ROUTES
   // ============================================================
-  
+
   /**
    * POST /api/ai/summary
    * Generate a structured medical summary using GPT-4
@@ -452,16 +453,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/ai/summary', async (req: Request, res: Response) => {
     try {
       const { patientName, patientAge, visitType, painLevel, notesRaw } = req.body;
-      
+
       // Validation minimale
       if (!notesRaw || notesRaw.trim().length === 0) {
-        return res.status(400).json({ 
-          error: "Les notes de visite sont requises" 
+        return res.status(400).json({
+          error: "Les notes de visite sont requises"
         });
       }
 
       console.log('[GPT-4] Generating summary for:', { patientName, visitType });
-      
+
       // Appel à GPT-4 avec prompt médical structuré
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -506,14 +507,14 @@ Génère un résumé TRÈS COURT (4-5 lignes max) de cette visite.`
 
       const summary = completion.choices[0].message.content || "Erreur: pas de résumé généré";
       console.log('[GPT-4] Summary generated successfully');
-      
+
       res.json({ summary });
-      
+
     } catch (error: any) {
       console.error('[GPT-4] Error generating summary:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Erreur lors de la génération du résumé',
-        details: error.message 
+        details: error.message
       });
     }
   });
@@ -525,15 +526,15 @@ Génère un résumé TRÈS COURT (4-5 lignes max) de cette visite.`
   app.post('/api/ai/transmission', async (req: Request, res: Response) => {
     try {
       const { patientName, patientAge, visitType, painLevel, notesRaw, notesSummary } = req.body;
-      
+
       if (!notesRaw || notesRaw.trim().length === 0) {
-        return res.status(400).json({ 
-          error: "Les notes de visite sont requises" 
+        return res.status(400).json({
+          error: "Les notes de visite sont requises"
         });
       }
 
       console.log('[GPT-4] Generating transmission for:', { patientName, visitType });
-      
+
       // Appel à GPT-4 avec prompt de transmission médicale
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -587,14 +588,14 @@ Génère une transmission médicale structurée pour le médecin traitant.`
 
       const transmission = completion.choices[0].message.content || "Erreur: pas de transmission générée";
       console.log('[GPT-4] Transmission generated successfully');
-      
+
       res.json({ transmission });
-      
+
     } catch (error: any) {
       console.error('[GPT-4] Error generating transmission:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Erreur lors de la génération de la transmission',
-        details: error.message 
+        details: error.message
       });
     }
   });
@@ -606,7 +607,7 @@ Génère une transmission médicale structurée pour le médecin traitant.`
   app.post('/api/voice/synthesize', async (req: Request, res: Response) => {
     try {
       const { text } = req.body;
-      
+
       if (!text || text.trim().length === 0) {
         return res.status(400).json({ error: 'Text is required' });
       }
@@ -623,23 +624,23 @@ Génère une transmission médicale structurée pour le médecin traitant.`
 
       // Convert response to buffer
       const buffer = Buffer.from(await mp3Response.arrayBuffer());
-      
+
       console.log('[TTS] Audio generated successfully, size:', buffer.length);
 
       // Return audio as base64 for easy storage
       const base64Audio = buffer.toString('base64');
-      
-      res.json({ 
+
+      res.json({
         audio: base64Audio,
         mimeType: 'audio/mpeg',
-        success: true 
+        success: true
       });
 
     } catch (error: any) {
       console.error('[TTS] Error generating audio:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Erreur lors de la synthèse vocale',
-        details: error.message 
+        details: error.message
       });
     }
   });
@@ -676,7 +677,7 @@ Génère une transmission médicale structurée pour le médecin traitant.`
         });
 
         let cleanedText = transcription.text;
-        
+
         // Nettoyer les hallucinations connues de Whisper
         const hallucinations = [
           /sous-titres?\s+(réalisés?\s+)?par(a)?\s+la\s+communauté\s+d'?amara\.org/gi,
@@ -686,7 +687,7 @@ Génère une transmission médicale structurée pour le médecin traitant.`
           /la\s+vidéo/gi,
           /cette\s+vidéo/gi,
         ];
-        
+
         hallucinations.forEach(pattern => {
           cleanedText = cleanedText.replace(pattern, '').trim();
         });
@@ -696,9 +697,9 @@ Génère une transmission médicale structurée pour le médecin traitant.`
         // Clean up temp file
         fs.unlinkSync(tempFilePath);
 
-        res.json({ 
+        res.json({
           text: cleanedText,
-          success: true 
+          success: true
         });
 
       } catch (whisperError: any) {
@@ -706,19 +707,19 @@ Génère une transmission médicale structurée pour le médecin traitant.`
         if (fs.existsSync(tempFilePath)) {
           fs.unlinkSync(tempFilePath);
         }
-        
+
         console.error('[WHISPER] Transcription error:', whisperError);
-        res.status(500).json({ 
+        res.status(500).json({
           error: 'Erreur lors de la transcription',
-          details: whisperError.message 
+          details: whisperError.message
         });
       }
-      
+
     } catch (error: any) {
       console.error('[WHISPER] Error:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Erreur lors de la transcription',
-        details: error.message 
+        details: error.message
       });
     }
   });
@@ -908,7 +909,7 @@ Génère une transmission médicale structurée pour le médecin traitant.`
           details: embError.message,
         });
       }
-      
+
       // continue: 4. Upsert dans Supabase
       try {
         if (!supabaseIngestion) {
@@ -1134,6 +1135,221 @@ Génère une transmission médicale structurée pour le médecin traitant.`
     } catch (error: any) {
       console.error('[NOTIFICATIONS] send-email error:', error);
       res.status(500).json({ success: false, error: error?.message || String(error) });
+    }
+  });
+
+  // ============================================================
+  // AGENDA ROUTES
+  // ============================================================
+
+  /**
+   * GET /api/agenda/participants
+   * Fetch all participants from Odoo via n8n GetParticipants webhook
+   */
+  app.get('/api/agenda/participants', async (req: Request, res: Response) => {
+    try {
+      console.log('[AGENDA] Fetching participants from n8n GetParticipants webhook...');
+
+      const response = await fetch('https://treeporteur-n8n.fr/webhook/GetParticipants', {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        console.error('[AGENDA] GetParticipants error:', response.status, body);
+        return res.status(502).json({
+          error: 'Erreur lors de la récupération des participants',
+        });
+      }
+
+      const participants = await response.json();
+      console.log('[AGENDA] Got', Array.isArray(participants) ? participants.length : 0, 'participants');
+
+      res.json({ participants });
+    } catch (error: any) {
+      console.error('[AGENDA] Error fetching participants:', error);
+      res.status(500).json({
+        error: 'Erreur interne lors de la récupération des participants',
+        details: error.message,
+      });
+    }
+  });
+
+  /**
+   * POST /api/agenda/prepare
+   * Extract event data from text and match participants
+   * Body: { text: string }
+   */
+  app.post('/api/agenda/prepare', async (req: Request, res: Response) => {
+    try {
+      const { text } = req.body as { text?: string };
+
+      if (!text || !text.trim()) {
+        return res.status(400).json({ error: 'Le texte est requis' });
+      }
+
+      console.log('[AGENDA] Preparing event from text:', text.substring(0, 100) + '...');
+
+      // 1. Fetch participants from n8n
+      const participantsResponse = await fetch('https://treeporteur-n8n.fr/webhook/GetParticipants', {
+        method: 'GET',
+      });
+
+      if (!participantsResponse.ok) {
+        console.error('[AGENDA] Failed to fetch participants');
+        return res.status(502).json({
+          error: 'Impossible de récupérer la liste des participants',
+        });
+      }
+
+      const participants: OdooParticipant[] = await participantsResponse.json();
+      console.log('[AGENDA] Got', participants.length, 'participants for matching');
+
+      // 2. Extract and prepare event
+      const payload = await prepareAgendaEvent(text, participants);
+
+      console.log('[AGENDA] Event prepared:', {
+        participants_count: payload.participants.length,
+        matched: payload.participants.filter(p => p.status === 'matched').length,
+        unmatched: payload.participants.filter(p => p.status === 'unmatched').length,
+        warnings: payload.warnings.length,
+      });
+
+      res.json(payload);
+    } catch (error: any) {
+      console.error('[AGENDA] Error preparing event:', error);
+      res.status(500).json({
+        error: 'Erreur lors de la préparation de l\'événement',
+        details: error.message,
+      });
+    }
+  });
+
+  /**
+   * POST /api/agenda/create-contact
+   * Create a new contact via n8n CreateNewContact webhook
+   * Body: { name: string, email?: string, phone?: string }
+   */
+  app.post('/api/agenda/create-contact', async (req: Request, res: Response) => {
+    try {
+      const { name, email, phone } = req.body as { name?: string; email?: string; phone?: string };
+
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'Le nom est requis' });
+      }
+
+      console.log('[AGENDA] Creating new contact:', { name, email, phone });
+
+      const response = await fetch('https://treeporteur-n8n.fr/webhook/CreateNewContact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email || null,
+          phone: phone || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        console.error('[AGENDA] CreateNewContact error:', response.status, body);
+        return res.status(502).json({
+          error: 'Erreur lors de la création du contact',
+          details: body,
+        });
+      }
+
+      const createdContact = await response.json();
+      console.log('[AGENDA] Contact created:', createdContact);
+
+      res.json({
+        success: true,
+        contact: createdContact,
+      });
+    } catch (error: any) {
+      console.error('[AGENDA] Error creating contact:', error);
+      res.status(500).json({
+        error: 'Erreur interne lors de la création du contact',
+        details: error.message,
+      });
+    }
+  });
+
+  /**
+   * POST /api/agenda/confirm
+   * Confirm event creation - calls n8n CreateCalendarEvent webhook
+   * Body: { event: {...}, participants: [...] }
+   */
+  app.post('/api/agenda/confirm', async (req: Request, res: Response) => {
+    try {
+      const { event, participants } = req.body;
+
+      if (!event) {
+        return res.status(400).json({ error: 'Les données de l\'événement sont requises' });
+      }
+
+      console.log('[AGENDA] Confirming event:', {
+        start: event.start,
+        stop: event.stop,
+        participant_ids: event.participant_ids,
+        description: event.description,
+      });
+
+      // Prepare payload for n8n webhook
+      const webhookPayload = {
+        name: event.description || 'Rendez-vous',
+        start: event.start,
+        stop: event.stop,
+        partner_id: 3, // Always 3 as per requirements
+        partner_ids: event.participant_ids || [],
+      };
+
+      console.log('[AGENDA] Calling CreateCalendarEvent webhook with:', webhookPayload);
+
+      // Call n8n webhook to create calendar event
+      const webhookResponse = await fetch('https://treeporteur-n8n.fr/webhook/CreateCalendarEvent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload),
+      });
+
+      if (!webhookResponse.ok) {
+        const errorBody = await webhookResponse.text().catch(() => '');
+        console.error('[AGENDA] CreateCalendarEvent webhook error:', webhookResponse.status, errorBody);
+        return res.status(502).json({
+          error: 'Erreur lors de la création de l\'événement dans Odoo',
+          details: errorBody,
+        });
+      }
+
+      const webhookResult = await webhookResponse.json().catch(() => ({}));
+      console.log('[AGENDA] Calendar event created:', webhookResult);
+
+      // Build participant names for summary
+      const participantNames = participants
+        ?.filter((p: any) => p.status === 'matched' || p.partner_id)
+        .map((p: any) => p.matched_name || p.input_name)
+        .join(', ') || 'Aucun participant';
+
+      res.json({
+        success: true,
+        message: 'Événement créé avec succès dans Odoo Agenda',
+        odoo_response: webhookResult,
+        summary: {
+          title: event.description || 'Rendez-vous',
+          start: event.start,
+          stop: event.stop,
+          location: event.location || 'Non spécifié',
+          participants: participantNames,
+          participant_ids: event.participant_ids || [],
+        },
+      });
+    } catch (error: any) {
+      console.error('[AGENDA] Error confirming event:', error);
+      res.status(500).json({
+        error: 'Erreur lors de la confirmation de l\'événement',
+        details: error.message,
+      });
     }
   });
 
