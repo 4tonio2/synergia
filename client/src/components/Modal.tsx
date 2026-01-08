@@ -27,7 +27,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
             <X className="w-6 h-6" />
           </button>
         </div>
-        
+
         <div className="px-6 py-4">
           {children}
         </div>
@@ -44,7 +44,7 @@ interface TransmissionModalProps {
 
 export function TransmissionModal({ isOpen, onClose, content }: TransmissionModalProps) {
   const toast = useCustomToast();
-  
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
@@ -61,7 +61,7 @@ export function TransmissionModal({ isOpen, onClose, content }: TransmissionModa
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{content}</p>
         </div>
-        
+
         <div className="flex gap-3">
           <Button onClick={handleCopy} className="flex-1">
             Copier
@@ -203,12 +203,12 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2">
                   <label className="text-xs text-gray-500">Titre</label>
-                  <Input value={title} onChange={(e:any)=>setTitle(e.target.value)} placeholder="Ex: Visite de contrôle - Pansement" className="mt-1" />
+                  <Input value={title} onChange={(e: any) => setTitle(e.target.value)} placeholder="Ex: Visite de contrôle - Pansement" className="mt-1" />
                 </div>
 
                 <div>
                   <label className="text-xs text-gray-500">Nom de la personne</label>
-                  <Input value={person} onChange={(e:any)=>setPerson(e.target.value)} placeholder="Nom complet (ex: Jean Dupont)" className="mt-1" />
+                  <Input value={person} onChange={(e: any) => setPerson(e.target.value)} placeholder="Nom complet (ex: Jean Dupont)" className="mt-1" />
                 </div>
 
                 <div>
@@ -216,7 +216,7 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
                   <Input
                     type="email"
                     value={email}
-                    onChange={(e:any)=>setEmail(e.target.value)}
+                    onChange={(e: any) => setEmail(e.target.value)}
                     placeholder="ex: jean.dupont@example.com"
                     className="mt-1"
                   />
@@ -224,27 +224,27 @@ export function ActionsRapidesModal({ isOpen, onClose, onCreateRdv, patientName,
 
                 <div>
                   <label className="text-xs text-gray-500">Date</label>
-                  <input className="w-full p-2 mt-1 border rounded" type="date" value={date} onChange={(e:any)=>setDate(e.target.value)} />
+                  <input className="w-full p-2 mt-1 border rounded" type="date" value={date} onChange={(e: any) => setDate(e.target.value)} />
                 </div>
 
                 <div>
                   <label className="text-xs text-gray-500">Heure</label>
-                  <input className="w-full p-2 mt-1 border rounded" type="time" value={time} onChange={(e:any)=>setTime(e.target.value)} />
+                  <input className="w-full p-2 mt-1 border rounded" type="time" value={time} onChange={(e: any) => setTime(e.target.value)} />
                 </div>
 
                 <div>
                   <label className="text-xs text-gray-500">Durée (min)</label>
-                  <Input type="number" value={String(durationMinutes)} onChange={(e:any)=>setDurationMinutes(Number(e.target.value))} placeholder="30" className="mt-1" />
+                  <Input type="number" value={String(durationMinutes)} onChange={(e: any) => setDurationMinutes(Number(e.target.value))} placeholder="30" className="mt-1" />
                 </div>
 
                 <div>
                   <label className="text-xs text-gray-500">Lieu</label>
-                  <Input value={location} onChange={(e:any)=>setLocation(e.target.value)} placeholder="Ex: Cabinet ou Domicile (laisser vide si non applicable)" className="mt-1" />
+                  <Input value={location} onChange={(e: any) => setLocation(e.target.value)} placeholder="Ex: Cabinet ou Domicile (laisser vide si non applicable)" className="mt-1" />
                 </div>
 
                 <div className="sm:col-span-2">
                   <label className="text-xs text-gray-500">Notes supplémentaires</label>
-                  <Textarea value={notes} onChange={(e:any)=>setNotes(e.target.value)} placeholder="Ex: Prévoir changement de pansement, confirmer disponibilité" className="mt-1 h-24" />
+                  <Textarea value={notes} onChange={(e: any) => setNotes(e.target.value)} placeholder="Ex: Prévoir changement de pansement, confirmer disponibilité" className="mt-1 h-24" />
                 </div>
               </div>
             </div>
