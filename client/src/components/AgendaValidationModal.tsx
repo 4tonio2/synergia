@@ -1,445 +1,632 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Check, AlertCircle, UserPlus, Calendar, MapPin, Clock, Users } from 'lucide-react';
+import { X, Loader2, Check, AlertCircle, UserPlus, Calendar, MapPin, Clock, Users, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useCustomToast } from '@/hooks/useToast';
 
+// Interface for availability suggestion from the check-availability webhook
+interface AvailabilitySuggestion {
+	start: string;
+	stop: string;
+	reason?: string;
+}
+
+interface AvailabilityCheckResult {
+	success: boolean;
+	attempts: number;
+	suggestions: AvailabilitySuggestion[];
+	conflicts: any[];
+	message: string;
+}
+
 interface ParticipantMatch {
-    input_name: string;
-    status: 'matched' | 'unmatched' | 'ambiguous';
-    partner_id: number | null;
-    matched_name: string | null;
-    score: number;
-    candidates: Array<{ partner_id: number; name: string; score: number }>;
-    needs_contact_creation: boolean;
-    proposed_contact: { name: string; email: string | null; phone: string | null };
+	input_name: string;
+	status: 'matched' | 'unmatched' | 'ambiguous';
+	partner_id: number | null;
+	matched_name: string | null;
+	score: number;
+	candidates: Array<{ partner_id: number; name: string; score: number }>;
+	needs_contact_creation: boolean;
+	proposed_contact: { name: string; email: string | null; phone: string | null };
 }
 
 interface AgendaEvent {
-    partner_id: number;
-    participant_ids: number[];
-    start: string;
-    stop: string;
-    description: string;
-    location: string;
+	partner_id: number;
+	participant_ids: number[];
+	start: string;
+	stop: string;
+	description: string;
+	location: string;
 }
 
 interface AgendaValidationPayload {
-    to_validate: boolean;
-    event: AgendaEvent;
-    participants: ParticipantMatch[];
-    warnings: string[];
-    raw_extraction: any;
+	to_validate: boolean;
+	event: AgendaEvent;
+	participants: ParticipantMatch[];
+	warnings: string[];
+	raw_extraction: any;
 }
 
 interface AgendaValidationModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    payload: AgendaValidationPayload | null;
-    onRefreshPayload?: (updatedPayload: AgendaValidationPayload) => void;
+	isOpen: boolean;
+	onClose: () => void;
+	payload: AgendaValidationPayload | null;
+	onRefreshPayload?: (updatedPayload: AgendaValidationPayload) => void;
 }
 
 export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPayload }: AgendaValidationModalProps) {
-    const toast = useCustomToast();
-    const [isConfirming, setIsConfirming] = useState(false);
-    const [isCreatingContact, setIsCreatingContact] = useState<number | null>(null);
-    const [localPayload, setLocalPayload] = useState<AgendaValidationPayload | null>(payload);
+	const toast = useCustomToast();
+	const [isConfirming, setIsConfirming] = useState(false);
+	const [isCreatingContact, setIsCreatingContact] = useState<number | null>(null);
+	const [localPayload, setLocalPayload] = useState<AgendaValidationPayload | null>(payload);
 
-    // Contact creation form state
-    const [contactForm, setContactForm] = useState<{ name: string; email: string; phone: string }>({
-        name: '',
-        email: '',
-        phone: '',
-    });
-    const [showContactForm, setShowContactForm] = useState<number | null>(null);
+	// Availability check state
+	const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+	const [availabilityResult, setAvailabilityResult] = useState<AvailabilityCheckResult | null>(null);
+	const [showSuggestions, setShowSuggestions] = useState(false);
 
-    useEffect(() => {
-        setLocalPayload(payload);
-    }, [payload]);
+	// Contact creation form state
+	const [contactForm, setContactForm] = useState<{ name: string; email: string; phone: string }>({
+		name: '',
+		email: '',
+		phone: '',
+	});
+	const [showContactForm, setShowContactForm] = useState<number | null>(null);
 
-    if (!isOpen || !localPayload) return null;
+	useEffect(() => {
+		setLocalPayload(payload);
+	}, [payload]);
 
-    const { event, participants, warnings } = localPayload;
+	if (!isOpen || !localPayload) return null;
 
-    const matchedCount = participants.filter(p => p.status === 'matched').length;
-    const unmatchedCount = participants.filter(p => p.status === 'unmatched').length;
-    const ambiguousCount = participants.filter(p => p.status === 'ambiguous').length;
+	const { event, participants, warnings } = localPayload;
 
-    const handleCreateContact = async (index: number) => {
-        const participant = participants[index];
-        if (!participant) return;
+	const matchedCount = participants.filter(p => p.status === 'matched').length;
+	const unmatchedCount = participants.filter(p => p.status === 'unmatched').length;
+	const ambiguousCount = participants.filter(p => p.status === 'ambiguous').length;
 
-        setIsCreatingContact(index);
+	const handleCreateContact = async (index: number) => {
+		const participant = participants[index];
+		if (!participant) return;
 
-        try {
-            const response = await fetch('/api/agenda', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'create-contact',
-                    name: contactForm.name || participant.proposed_contact.name,
-                    email: contactForm.email || null,
-                    phone: contactForm.phone || null,
-                }),
-            });
+		setIsCreatingContact(index);
 
-            if (!response.ok) {
-                throw new Error('Erreur lors de la création du contact');
-            }
+		try {
+			const response = await fetch('/api/agenda', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'create-contact',
+					name: contactForm.name || participant.proposed_contact.name,
+					email: contactForm.email || null,
+					phone: contactForm.phone || null,
+				}),
+			});
 
-            const result = await response.json();
-            console.log('[AGENDA] Contact created:', result);
+			if (!response.ok) {
+				throw new Error('Erreur lors de la création du contact');
+			}
 
-            // Update local state - mark participant as matched with new ID
-            const newParticipants = [...participants];
-            const contactId = result.contact?.id || result.contact?.partner_id;
+			const result = await response.json();
+			console.log('[AGENDA] Contact created:', result);
 
-            if (contactId) {
-                newParticipants[index] = {
-                    ...participant,
-                    status: 'matched',
-                    partner_id: contactId,
-                    matched_name: contactForm.name || participant.proposed_contact.name,
-                    needs_contact_creation: false,
-                };
+			// Update local state - mark participant as matched with new ID
+			const newParticipants = [...participants];
+			const contactId = result.contact?.id || result.contact?.partner_id;
 
-                // Update event participant_ids
-                const newEvent = {
-                    ...event,
-                    participant_ids: [...event.participant_ids, contactId],
-                };
+			if (contactId) {
+				newParticipants[index] = {
+					...participant,
+					status: 'matched',
+					partner_id: contactId,
+					matched_name: contactForm.name || participant.proposed_contact.name,
+					needs_contact_creation: false,
+				};
 
-                const updatedPayload = {
-                    ...localPayload,
-                    event: newEvent,
-                    participants: newParticipants,
-                };
+				// Update event participant_ids
+				const newEvent = {
+					...event,
+					participant_ids: [...event.participant_ids, contactId],
+				};
 
-                setLocalPayload(updatedPayload);
-                onRefreshPayload?.(updatedPayload);
-            }
+				const updatedPayload = {
+					...localPayload,
+					event: newEvent,
+					participants: newParticipants,
+				};
 
-            toast.success(`Contact "${contactForm.name || participant.proposed_contact.name}" créé avec succès`);
-            setShowContactForm(null);
-            setContactForm({ name: '', email: '', phone: '' });
+				setLocalPayload(updatedPayload);
+				onRefreshPayload?.(updatedPayload);
+			}
 
-        } catch (error: any) {
-            console.error('[AGENDA] Error creating contact:', error);
-            toast.error(error.message || 'Erreur lors de la création du contact');
-        } finally {
-            setIsCreatingContact(null);
-        }
-    };
+			toast.success(`Contact "${contactForm.name || participant.proposed_contact.name}" créé avec succès`);
+			setShowContactForm(null);
+			setContactForm({ name: '', email: '', phone: '' });
 
-    const handleSelectCandidate = (participantIndex: number, candidate: { partner_id: number; name: string }) => {
-        const newParticipants = [...participants];
-        newParticipants[participantIndex] = {
-            ...participants[participantIndex],
-            status: 'matched',
-            partner_id: candidate.partner_id,
-            matched_name: candidate.name,
-        };
+		} catch (error: any) {
+			console.error('[AGENDA] Error creating contact:', error);
+			toast.error(error.message || 'Erreur lors de la création du contact');
+		} finally {
+			setIsCreatingContact(null);
+		}
+	};
 
-        const newEvent = {
-            ...event,
-            participant_ids: [...event.participant_ids.filter(id => id !== null), candidate.partner_id],
-        };
+	const handleSelectCandidate = (participantIndex: number, candidate: { partner_id: number; name: string }) => {
+		const newParticipants = [...participants];
+		newParticipants[participantIndex] = {
+			...participants[participantIndex],
+			status: 'matched',
+			partner_id: candidate.partner_id,
+			matched_name: candidate.name,
+		};
 
-        const updatedPayload = {
-            ...localPayload,
-            event: newEvent,
-            participants: newParticipants,
-        };
+		const newEvent = {
+			...event,
+			participant_ids: [...event.participant_ids.filter(id => id !== null), candidate.partner_id],
+		};
 
-        setLocalPayload(updatedPayload);
-        onRefreshPayload?.(updatedPayload);
-    };
+		const updatedPayload = {
+			...localPayload,
+			event: newEvent,
+			participants: newParticipants,
+		};
 
-    const handleConfirm = async () => {
-        setIsConfirming(true);
+		setLocalPayload(updatedPayload);
+		onRefreshPayload?.(updatedPayload);
+	};
 
-        try {
-            const response = await fetch('/api/agenda', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'confirm',
-                    event: localPayload.event,
-                    participants: localPayload.participants,
-                }),
-            });
+	const handleConfirm = async () => {
+		// First, check availability
+		setIsCheckingAvailability(true);
+		setAvailabilityResult(null);
+		setShowSuggestions(false);
 
-            if (!response.ok) {
-                throw new Error('Erreur lors de la confirmation');
-            }
+		try {
+			// Get all participant IDs (matched ones)
+			const contactIds = localPayload.participants
+				.filter((p: ParticipantMatch) => p.status === 'matched' && p.partner_id)
+				.map((p: ParticipantMatch) => p.partner_id as number);
 
-            const result = await response.json();
-            console.log('[AGENDA] Event confirmed:', result);
+			// Also include event participant_ids
+			const allContactIds = [...new Set([...contactIds, ...localPayload.event.participant_ids])];
 
-            // Show success popup with summary
-            toast.success(
-                `✅ Événement préparé!\n📅 ${result.summary?.title || 'Rendez-vous'}\n🕐 ${result.summary?.start || ''} - ${result.summary?.stop || ''}\n👥 ${result.summary?.participants || 'Aucun participant'}`
-            );
+			if (allContactIds.length === 0) {
+				// No participants to check, proceed directly
+				await confirmEvent(false);
+				return;
+			}
 
-            onClose();
+			console.log('[AGENDA] Checking availability for:', {
+				contact_ids: allContactIds,
+				start: localPayload.event.start,
+				stop: localPayload.event.stop
+			});
 
-        } catch (error: any) {
-            console.error('[AGENDA] Error confirming event:', error);
-            toast.error(error.message || 'Erreur lors de la confirmation');
-        } finally {
-            setIsConfirming(false);
-        }
-    };
+			const response = await fetch('/api/agenda', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'check-availability',
+					contact_ids: allContactIds,
+					start: localPayload.event.start,
+					stop: localPayload.event.stop,
+				}),
+			});
 
-    const formatDateTime = (dateStr: string) => {
-        if (!dateStr) return 'Non spécifié';
-        try {
-            const [datePart, timePart] = dateStr.split(' ');
-            const [year, month, day] = datePart.split('-');
-            const timeFormatted = timePart ? timePart.substring(0, 5) : '';
-            return `${day}/${month}/${year} ${timeFormatted}`;
-        } catch {
-            return dateStr;
-        }
-    };
+			if (!response.ok) {
+				throw new Error('Erreur lors de la vérification de disponibilité');
+			}
 
-    const allMatched = participants.every(p => p.status === 'matched');
+			const result: AvailabilityCheckResult = await response.json();
+			console.log('[AGENDA] Availability check result:', result);
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-                {/* Header */}
-                <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-                    <div className="flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-indigo-600" />
-                        <h2 className="text-xl font-bold text-gray-800">Valider l'événement</h2>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                        <X className="w-6 h-6" />
-                    </button>
-                </div>
+			setAvailabilityResult(result);
 
-                <div className="px-6 py-4 space-y-4">
-                    {/* Event Summary */}
-                    <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-                        <h3 className="font-semibold text-indigo-800 flex items-center gap-2">
-                            <Calendar className="w-4 h-4" />
-                            Détails de l'événement
-                        </h3>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div className="flex items-center gap-1 text-gray-700">
-                                <Clock className="w-3 h-3" />
-                                <span className="font-medium">Début:</span>
-                                <span>{formatDateTime(event.start)}</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-gray-700">
-                                <Clock className="w-3 h-3" />
-                                <span className="font-medium">Fin:</span>
-                                <span>{formatDateTime(event.stop)}</span>
-                            </div>
-                        </div>
-                        <div className="text-sm text-gray-700">
-                            <span className="font-medium">Description:</span> {event.description || 'Non spécifiée'}
-                        </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-700">
-                            <MapPin className="w-3 h-3" />
-                            <span className="font-medium">Lieu:</span>
-                            <span>{event.location || 'Non spécifié'}</span>
-                        </div>
-                    </div>
+			if (result.attempts > 0 && result.suggestions && result.suggestions.length > 0) {
+				// There are conflicts, show suggestions
+				setShowSuggestions(true);
+				toast.warning(`⚠️ ${result.message}`);
+			} else {
+				// No conflicts, proceed with confirmation
+				await confirmEvent(false);
+			}
+		} catch (error: any) {
+			console.error('[AGENDA] Error checking availability:', error);
+			toast.error(error.message || 'Erreur lors de la vérification de disponibilité');
+			// On error, we could still allow the user to force create
+			setAvailabilityResult({
+				success: false,
+				attempts: 0,
+				suggestions: [],
+				conflicts: [],
+				message: 'Impossible de vérifier la disponibilité',
+			});
+		} finally {
+			setIsCheckingAvailability(false);
+		}
+	};
 
-                    {/* Warnings */}
-                    {warnings.length > 0 && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
-                            <div className="flex items-start gap-2">
-                                <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5" />
-                                <div className="text-sm text-yellow-800">
-                                    {warnings.map((w, i) => (
-                                        <div key={i}>⚠️ {w}</div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+	const confirmEvent = async (skipAvailabilityCheck: boolean) => {
+		setIsConfirming(true);
 
-                    {/* Participants */}
-                    <div className="space-y-3">
-                        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                            <Users className="w-4 h-4" />
-                            Participants ({participants.length})
-                            {matchedCount > 0 && (
-                                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                                    {matchedCount} ✓
-                                </span>
-                            )}
-                            {unmatchedCount > 0 && (
-                                <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
-                                    {unmatchedCount} à créer
-                                </span>
-                            )}
-                        </h3>
+		try {
+			const response = await fetch('/api/agenda', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'confirm',
+					event: localPayload.event,
+					participants: localPayload.participants,
+					skipAvailabilityCheck,
+				}),
+			});
 
-                        {participants.length === 0 ? (
-                            <div className="text-sm text-gray-500 italic">Aucun participant détecté</div>
-                        ) : (
-                            <div className="space-y-2">
-                                {participants.map((participant, index) => (
-                                    <div
-                                        key={index}
-                                        className={`border rounded-xl p-3 text-sm ${participant.status === 'matched'
-                                            ? 'border-green-200 bg-green-50'
-                                            : participant.status === 'ambiguous'
-                                                ? 'border-blue-200 bg-blue-50'
-                                                : 'border-orange-200 bg-orange-50'
-                                            }`}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <span className="font-medium">
-                                                    {participant.input_name}
-                                                </span>
-                                                {participant.status === 'matched' && participant.matched_name && (
-                                                    <span className="text-green-600 ml-2">
-                                                        ✓ {participant.matched_name} (ID: {participant.partner_id})
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {participant.status === 'matched' && (
-                                                <Check className="w-4 h-4 text-green-600" />
-                                            )}
-                                        </div>
+			if (!response.ok) {
+				throw new Error('Erreur lors de la confirmation');
+			}
 
-                                        {/* Ambiguous - show candidates */}
-                                        {participant.status === 'ambiguous' && participant.candidates.length > 0 && (
-                                            <div className="mt-2 space-y-1">
-                                                <p className="text-xs text-blue-600">Plusieurs correspondances possibles:</p>
-                                                {participant.candidates.map((c, ci) => (
-                                                    <button
-                                                        key={ci}
-                                                        onClick={() => handleSelectCandidate(index, c)}
-                                                        className="block w-full text-left px-2 py-1 bg-white border border-blue-200 rounded hover:bg-blue-100 text-xs"
-                                                    >
-                                                        {c.name} (score: {(c.score * 100).toFixed(0)}%)
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
+			const result = await response.json();
+			console.log('[AGENDA] Event confirmed:', result);
 
-                                        {/* Unmatched - show create form */}
-                                        {participant.status === 'unmatched' && (
-                                            <div className="mt-2">
-                                                {showContactForm === index ? (
-                                                    <div className="space-y-2 bg-white p-2 rounded-lg border">
-                                                        <Input
-                                                            placeholder="Nom"
-                                                            value={contactForm.name || participant.proposed_contact.name}
-                                                            onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
-                                                            className="text-sm h-8"
-                                                        />
-                                                        <Input
-                                                            placeholder="Email (optionnel)"
-                                                            type="email"
-                                                            value={contactForm.email}
-                                                            onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
-                                                            className="text-sm h-8"
-                                                        />
-                                                        <Input
-                                                            placeholder="Téléphone (optionnel)"
-                                                            value={contactForm.phone}
-                                                            onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
-                                                            className="text-sm h-8"
-                                                        />
-                                                        <div className="flex gap-2">
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={() => handleCreateContact(index)}
-                                                                disabled={isCreatingContact === index}
-                                                                className="flex-1 h-8 text-xs"
-                                                            >
-                                                                {isCreatingContact === index ? (
-                                                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                                                ) : (
-                                                                    <>
-                                                                        <UserPlus className="w-3 h-3 mr-1" />
-                                                                        Créer
-                                                                    </>
-                                                                )}
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => {
-                                                                    setShowContactForm(null);
-                                                                    setContactForm({ name: '', email: '', phone: '' });
-                                                                }}
-                                                                className="h-8 text-xs"
-                                                            >
-                                                                Annuler
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => {
-                                                            setContactForm({
-                                                                name: participant.proposed_contact.name,
-                                                                email: '',
-                                                                phone: '',
-                                                            });
-                                                            setShowContactForm(index);
-                                                        }}
-                                                        className="flex items-center gap-1 text-xs text-orange-700 hover:text-orange-800 underline"
-                                                    >
-                                                        <UserPlus className="w-3 h-3" />
-                                                        Créer ce contact
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+			// Show success popup with summary
+			toast.success(
+				`✅ Événement créé!\\n📅 ${result.summary?.title || 'Rendez-vous'}\\n🕐 ${result.summary?.start || ''} - ${result.summary?.stop || ''}\\n👥 ${result.summary?.participants || 'Aucun participant'}`
+			);
 
-                    {/* Actions */}
-                    <div className="flex gap-3 pt-2">
-                        <Button
-                            onClick={handleConfirm}
-                            disabled={isConfirming}
-                            className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-                        >
-                            {isConfirming ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Confirmation...
-                                </>
-                            ) : (
-                                <>
-                                    <Check className="w-4 h-4 mr-2" />
-                                    Confirmer
-                                </>
-                            )}
-                        </Button>
-                        <Button
-                            onClick={onClose}
-                            variant="outline"
-                            className="flex-1"
-                        >
-                            Annuler
-                        </Button>
-                    </div>
+			onClose();
 
-                    {!allMatched && (
-                        <p className="text-xs text-gray-500 text-center">
-                            💡 Vous pouvez confirmer même si certains participants ne sont pas encore matchés
-                        </p>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
+		} catch (error: any) {
+			console.error('[AGENDA] Error confirming event:', error);
+			toast.error(error.message || 'Erreur lors de la confirmation');
+		} finally {
+			setIsConfirming(false);
+		}
+	};
+
+	const handleForceConfirm = async () => {
+		// User chose to ignore conflicts and create anyway
+		setShowSuggestions(false);
+		await confirmEvent(true);
+	};
+
+	const handleSelectSuggestion = (suggestion: AvailabilitySuggestion) => {
+		// Update the event with the suggested time slot
+		const updatedEvent = {
+			...localPayload.event,
+			start: suggestion.start,
+			stop: suggestion.stop,
+		};
+
+		const updatedPayload = {
+			...localPayload,
+			event: updatedEvent,
+		};
+
+		setLocalPayload(updatedPayload);
+		onRefreshPayload?.(updatedPayload);
+		setShowSuggestions(false);
+		setAvailabilityResult(null);
+
+		toast.success('📅 Créneau mis à jour. Confirmez pour créer l\'événement.');
+	};
+
+	const formatDateTime = (dateStr: string) => {
+		if (!dateStr) return 'Non spécifié';
+		try {
+			const [datePart, timePart] = dateStr.split(' ');
+			const [year, month, day] = datePart.split('-');
+			const timeFormatted = timePart ? timePart.substring(0, 5) : '';
+			return `${day}/${month}/${year} ${timeFormatted}`;
+		} catch {
+			return dateStr;
+		}
+	};
+
+	const allMatched = participants.every(p => p.status === 'matched');
+
+	return (
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+			<div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+				{/* Header */}
+				<div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+					<div className="flex items-center gap-2">
+						<Calendar className="w-5 h-5 text-indigo-600" />
+						<h2 className="text-xl font-bold text-gray-800">Valider l'événement</h2>
+					</div>
+					<button
+						onClick={onClose}
+						className="text-gray-400 hover:text-gray-600 transition-colors"
+					>
+						<X className="w-6 h-6" />
+					</button>
+				</div>
+
+				<div className="px-6 py-4 space-y-4">
+					{/* Event Summary */}
+					<div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+						<h3 className="font-semibold text-indigo-800 flex items-center gap-2">
+							<Calendar className="w-4 h-4" />
+							Détails de l'événement
+						</h3>
+						<div className="grid grid-cols-2 gap-2 text-sm">
+							<div className="flex items-center gap-1 text-gray-700">
+								<Clock className="w-3 h-3" />
+								<span className="font-medium">Début:</span>
+								<span>{formatDateTime(event.start)}</span>
+							</div>
+							<div className="flex items-center gap-1 text-gray-700">
+								<Clock className="w-3 h-3" />
+								<span className="font-medium">Fin:</span>
+								<span>{formatDateTime(event.stop)}</span>
+							</div>
+						</div>
+						<div className="text-sm text-gray-700">
+							<span className="font-medium">Description:</span> {event.description || 'Non spécifiée'}
+						</div>
+						<div className="flex items-center gap-1 text-sm text-gray-700">
+							<MapPin className="w-3 h-3" />
+							<span className="font-medium">Lieu:</span>
+							<span>{event.location || 'Non spécifié'}</span>
+						</div>
+					</div>
+
+					{/* Warnings */}
+					{warnings.length > 0 && (
+						<div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+							<div className="flex items-start gap-2">
+								<AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5" />
+								<div className="text-sm text-yellow-800">
+									{warnings.map((w, i) => (
+										<div key={i}>⚠️ {w}</div>
+									))}
+								</div>
+							</div>
+						</div>
+					)}
+
+					{/* Participants */}
+					<div className="space-y-3">
+						<h3 className="font-semibold text-gray-800 flex items-center gap-2">
+							<Users className="w-4 h-4" />
+							Participants ({participants.length})
+							{matchedCount > 0 && (
+								<span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+									{matchedCount} ✓
+								</span>
+							)}
+							{unmatchedCount > 0 && (
+								<span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+									{unmatchedCount} à créer
+								</span>
+							)}
+						</h3>
+
+						{participants.length === 0 ? (
+							<div className="text-sm text-gray-500 italic">Aucun participant détecté</div>
+						) : (
+							<div className="space-y-2">
+								{participants.map((participant, index) => (
+									<div
+										key={index}
+										className={`border rounded-xl p-3 text-sm ${participant.status === 'matched'
+											? 'border-green-200 bg-green-50'
+											: participant.status === 'ambiguous'
+												? 'border-blue-200 bg-blue-50'
+												: 'border-orange-200 bg-orange-50'
+											}`}
+									>
+										<div className="flex justify-between items-start">
+											<div>
+												<span className="font-medium">
+													{participant.input_name}
+												</span>
+												{participant.status === 'matched' && participant.matched_name && (
+													<span className="text-green-600 ml-2">
+														✓ {participant.matched_name} (ID: {participant.partner_id})
+													</span>
+												)}
+											</div>
+											{participant.status === 'matched' && (
+												<Check className="w-4 h-4 text-green-600" />
+											)}
+										</div>
+
+										{/* Ambiguous - show candidates */}
+										{participant.status === 'ambiguous' && participant.candidates.length > 0 && (
+											<div className="mt-2 space-y-1">
+												<p className="text-xs text-blue-600">Plusieurs correspondances possibles:</p>
+												{participant.candidates.map((c, ci) => (
+													<button
+														key={ci}
+														onClick={() => handleSelectCandidate(index, c)}
+														className="block w-full text-left px-2 py-1 bg-white border border-blue-200 rounded hover:bg-blue-100 text-xs"
+													>
+														{c.name} (score: {(c.score * 100).toFixed(0)}%)
+													</button>
+												))}
+											</div>
+										)}
+
+										{/* Unmatched - show create form */}
+										{participant.status === 'unmatched' && (
+											<div className="mt-2">
+												{showContactForm === index ? (
+													<div className="space-y-2 bg-white p-2 rounded-lg border">
+														<Input
+															placeholder="Nom"
+															value={contactForm.name || participant.proposed_contact.name}
+															onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
+															className="text-sm h-8"
+														/>
+														<Input
+															placeholder="Email (optionnel)"
+															type="email"
+															value={contactForm.email}
+															onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
+															className="text-sm h-8"
+														/>
+														<Input
+															placeholder="Téléphone (optionnel)"
+															value={contactForm.phone}
+															onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
+															className="text-sm h-8"
+														/>
+														<div className="flex gap-2">
+															<Button
+																size="sm"
+																onClick={() => handleCreateContact(index)}
+																disabled={isCreatingContact === index}
+																className="flex-1 h-8 text-xs"
+															>
+																{isCreatingContact === index ? (
+																	<Loader2 className="w-3 h-3 animate-spin" />
+																) : (
+																	<>
+																		<UserPlus className="w-3 h-3 mr-1" />
+																		Créer
+																	</>
+																)}
+															</Button>
+															<Button
+																size="sm"
+																variant="outline"
+																onClick={() => {
+																	setShowContactForm(null);
+																	setContactForm({ name: '', email: '', phone: '' });
+																}}
+																className="h-8 text-xs"
+															>
+																Annuler
+															</Button>
+														</div>
+													</div>
+												) : (
+													<button
+														onClick={() => {
+															setContactForm({
+																name: participant.proposed_contact.name,
+																email: '',
+																phone: '',
+															});
+															setShowContactForm(index);
+														}}
+														className="flex items-center gap-1 text-xs text-orange-700 hover:text-orange-800 underline"
+													>
+														<UserPlus className="w-3 h-3" />
+														Créer ce contact
+													</button>
+												)}
+											</div>
+										)}
+									</div>
+								))}
+							</div>
+						)}
+					</div>
+
+					{/* Availability Suggestions Panel */}
+					{showSuggestions && availabilityResult && availabilityResult.suggestions.length > 0 && (
+						<div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-3">
+							<div className="flex items-center gap-2 text-amber-800">
+								<RefreshCw className="w-4 h-4" />
+								<h4 className="font-semibold">Créneaux alternatifs suggérés</h4>
+							</div>
+							<p className="text-sm text-amber-700">
+								Des conflits ont été détectés pour certains participants. Voici des créneaux alternatifs :
+							</p>
+							<div className="space-y-2">
+								{availabilityResult.suggestions.map((suggestion, index) => (
+									<div
+										key={index}
+										className="flex items-center justify-between bg-white border border-amber-200 rounded-lg p-3"
+									>
+										<div className="text-sm">
+											<span className="font-medium">{formatDateTime(suggestion.start)}</span>
+											<span className="text-gray-500 mx-2">→</span>
+											<span className="font-medium">{formatDateTime(suggestion.stop)}</span>
+											{suggestion.reason && (
+												<span className="text-gray-500 ml-2 text-xs">({suggestion.reason})</span>
+											)}
+										</div>
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => handleSelectSuggestion(suggestion)}
+											className="text-xs border-amber-400 text-amber-700 hover:bg-amber-100"
+										>
+											<Check className="w-3 h-3 mr-1" />
+											Utiliser
+										</Button>
+									</div>
+								))}
+							</div>
+							<div className="flex gap-2 pt-2 border-t border-amber-200">
+								<Button
+									size="sm"
+									variant="outline"
+									onClick={handleForceConfirm}
+									disabled={isConfirming}
+									className="flex-1 text-xs text-gray-600 border-gray-300"
+								>
+									{isConfirming ? (
+										<Loader2 className="w-3 h-3 mr-1 animate-spin" />
+									) : (
+										<AlertCircle className="w-3 h-3 mr-1" />
+									)}
+									Ignorer et créer quand même
+								</Button>
+								<Button
+									size="sm"
+									variant="outline"
+									onClick={() => setShowSuggestions(false)}
+									className="text-xs"
+								>
+									Annuler
+								</Button>
+							</div>
+						</div>
+					)}
+
+					{/* Actions */}
+					<div className="flex gap-3 pt-2">
+						<Button
+							onClick={handleConfirm}
+							disabled={isConfirming || isCheckingAvailability || showSuggestions}
+							className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+						>
+							{isCheckingAvailability ? (
+								<>
+									<Loader2 className="w-4 h-4 mr-2 animate-spin" />
+									Vérification...
+								</>
+							) : isConfirming ? (
+								<>
+									<Loader2 className="w-4 h-4 mr-2 animate-spin" />
+									Création...
+								</>
+							) : (
+								<>
+									<Check className="w-4 h-4 mr-2" />
+									Confirmer
+								</>
+							)}
+						</Button>
+						<Button
+							onClick={onClose}
+							variant="outline"
+							className="flex-1"
+						>
+							Annuler
+						</Button>
+					</div>
+
+					{!allMatched && (
+						<p className="text-xs text-gray-500 text-center">
+							💡 Vous pouvez confirmer même si certains participants ne sont pas encore matchés
+						</p>
+					)}
+				</div>
+			</div>
+		</div>
+	);
 }
