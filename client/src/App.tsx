@@ -26,6 +26,7 @@ import E18_TourCoordinator from "@/pages/E18_TourCoordinator";
 import E19_ShopView from "@/pages/E19_ShopView";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
+import FloatingAgendaButton from "@/components/FloatingAgendaButton";
 
 function Router() {
   return (
@@ -182,12 +183,14 @@ function App() {
         <AppProvider>
           <TooltipProvider>
             {/* Container centré comme sur mobile - hauteur fixe à 100vh, pas de scroll navigateur */}
-            <div className="mx-auto max-w-md h-screen bg-white shadow-xl flex flex-col overflow-hidden">
+            <div className="mx-auto max-w-md h-screen bg-white shadow-xl flex flex-col overflow-hidden relative">
               <Toaster />
               {/* Zone de contenu scrollable */}
               <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
                 <Router />
               </div>
+              {/* Bouton flottant Agenda (global) */}
+              <FloatingAgendaButton />
               {/* Navbar fixe en bas */}
               <GlobalNavigation />
             </div>

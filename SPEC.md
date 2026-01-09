@@ -1,7 +1,7 @@
 # SPEC - Synergia
 
 Version: 1.0
-Auteur: équipe projet
+Auteur: Equipe 43
 Date: 30 décembre 2025
 
 ## 1. Résumé exécutif
@@ -306,23 +306,6 @@ Estimation totale: ~10-12 semaines pour 1.0 (équipe 2 devs full-time)
 - [ ] Migrations Drizzle à jour (si schema modifié)
 - [ ] Variables d'env listées dans `.env.example`
 - [ ] Documenter endpoints critiques (OpenAPI ou Postman)
-
----
-
-## 19. Next steps concrets (court terme)
-
-1. Ajouter `SPEC.md` (fait) — demander revue
-2. Ajouter `README` sections `env` avec variables nécessaires et `.env.example`
-3. Ajouter un test d'intégration minimal pour `/api/voice/transcribe` (mock OpenAI) et pour `/api/contacts/consent` en mode rejected
-4. Mettre en place GitHub Action basique: install, tsc check, unit tests, build
-5. Vérifier drizze migrations contre `shared/schema.ts`
-
----
-
-## 20. Annexes
-
-- Fichiers clefs: `server/routes.ts`, `shared/schema.ts`, `client/src/App.tsx`
-- Recommandations supplémentaires: documenter prompts IA dans un dossier `prompts/` et versionner les templates.
 
 
 Fin de la spec.
