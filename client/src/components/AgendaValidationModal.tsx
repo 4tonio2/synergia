@@ -30,6 +30,7 @@ interface AgendaEvent {
 	stop: string;
 	description: string;
 	location: string;
+	event_id?: number | string;
 }
 
 interface AgendaValidationPayload {
@@ -45,6 +46,7 @@ interface AgendaValidationPayload {
 		keywords?: string[];
 		participants?: string[];
 	};
+	found_event?: any;
 }
 
 interface AgendaValidationModalProps {
@@ -254,29 +256,32 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 			return;
 		}
 
-		// For update/cancel: find event ID then update/delete
+		// For update/cancel: use event_id if available, otherwise find by original_start + participant_ids
 		setIsConfirming(true);
 		try {
-			const originalStart = localPayload.event_match?.original_start;
-			const participantIds = localPayload.event.participant_ids || [];
-			if (!originalStart || participantIds.length === 0) {
-				throw new Error('Informations insuffisantes pour identifier l\'événement (start ou participants manquants)');
-			}
+			let eventId: number | string | null = (localPayload.event.event_id as any) ?? (localPayload.found_event?.event_id ?? localPayload.found_event?.id ?? null);
+			if (!eventId) {
+				const originalStart = localPayload.event_match?.original_start;
+				const participantIds = localPayload.event.participant_ids || [];
+				if (!originalStart || participantIds.length === 0) {
+					throw new Error('Informations insuffisantes pour identifier l\'événement (start ou participants manquants)');
+				}
 
-			const findResp = await fetch('/api/agenda', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					action: 'find-event',
-					original_start: originalStart,
-					participant_ids: participantIds,
-				}),
-			});
-			if (!findResp.ok) {
-				throw new Error('Erreur lors de l\'identification de l\'événement');
+				const findResp = await fetch('/api/agenda', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						action: 'find-event',
+						original_start: originalStart,
+						participant_ids: participantIds,
+					}),
+				});
+				if (!findResp.ok) {
+					throw new Error('Erreur lors de l\'identification de l\'événement');
+				}
+				const findData = await findResp.json();
+				eventId = findData?.event_id || findData?.id || null;
 			}
-			const findData = await findResp.json();
-			const eventId = findData?.event_id || findData?.id;
 			if (!eventId) {
 				throw new Error('Événement introuvable');
 			}
@@ -406,6 +411,11 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 	const isUpdate = (localPayload.intent || 'create') === 'update';
 	const isCancel = (localPayload.intent || 'create') === 'cancel';
 
+	const originalStartDisplay = localPayload.found_event?.start || localPayload.event_match?.original_start || '';
+	const originalStopDisplay = localPayload.found_event?.stop || localPayload.event_match?.original_stop || '';
+	const originalDescDisplay = localPayload.found_event?.description || localPayload.found_event?.name || '';
+	const originalLocationDisplay = localPayload.found_event?.location || '';
+
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
 			<div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
@@ -424,39 +434,53 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 				</div>
 
 				<div className="px-6 py-4 space-y-4">
-					{/* Event Summary */}
+					{/* Event Summary with Before/After for update/cancel */}
 					<div className="bg-indigo-50 rounded-xl p-4 space-y-2">
 						<h3 className="font-semibold text-indigo-800 flex items-center gap-2">
 							<Calendar className="w-4 h-4" />
 							{isUpdate ? "Modifier l'événement" : isCancel ? "Annuler l'événement" : "Détails de l'événement"}
 						</h3>
-						<div className="grid grid-cols-2 gap-2 text-sm">
-							<div className="flex items-center gap-1 text-gray-700">
-								<Clock className="w-3 h-3" />
-								<span className="font-medium">Début:</span>
-								<span>{formatDateTime(event.start)}</span>
+						{isUpdate || isCancel ? (
+							<div className="grid grid-cols-2 gap-3">
+								<div className="bg-white rounded-lg border border-indigo-200 p-3">
+									<h4 className="text-sm font-semibold text-indigo-700">Avant</h4>
+									<div className="mt-1 text-xs text-gray-700 space-y-1">
+										<div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span className="font-medium">Début:</span><span>{formatDateTime(originalStartDisplay)}</span></div>
+										{originalStopDisplay && <div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span className="font-medium">Fin:</span><span>{formatDateTime(originalStopDisplay)}</span></div>}
+										<div className="text-gray-700"><span className="font-medium">Description:</span> {originalDescDisplay || '—'}</div>
+										<div className="flex items-center gap-1"><MapPin className="w-3 h-3" /><span className="font-medium">Lieu:</span><span>{originalLocationDisplay || '—'}</span></div>
+									</div>
+								</div>
+								<div className="bg-white rounded-lg border border-green-200 p-3">
+									<h4 className="text-sm font-semibold text-green-700">Après</h4>
+									<div className="mt-1 text-xs text-gray-700 space-y-1">
+										<div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span className="font-medium">Début:</span><span>{formatDateTime(event.start)}</span></div>
+										<div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span className="font-medium">Fin:</span><span>{formatDateTime(event.stop)}</span></div>
+										<div className="text-gray-700"><span className="font-medium">Description:</span> {event.description || '—'}</div>
+										<div className="flex items-center gap-1"><MapPin className="w-3 h-3" /><span className="font-medium">Lieu:</span><span>{event.location || '—'}</span></div>
+									</div>
+								</div>
 							</div>
-							<div className="flex items-center gap-1 text-gray-700">
-								<Clock className="w-3 h-3" />
-								<span className="font-medium">Fin:</span>
-								<span>{formatDateTime(event.stop)}</span>
-							</div>
-						</div>
-						<div className="text-sm text-gray-700">
-							<span className="font-medium">Description:</span> {event.description || 'Non spécifiée'}
-						</div>
-						<div className="flex items-center gap-1 text-sm text-gray-700">
-							<MapPin className="w-3 h-3" />
-							<span className="font-medium">Lieu:</span>
-							<span>{event.location || 'Non spécifié'}</span>
-						</div>
-						{isUpdate && (
-							<div className="mt-2 text-xs text-gray-600">
-								<div className="font-medium">Événement original</div>
-								<div>Début: {formatDateTime(localPayload.event_match?.original_start || '')}</div>
-								{localPayload.event_match?.original_stop && (
-									<div>Fin: {formatDateTime(localPayload.event_match?.original_stop)}</div>
-								)}
+						) : (
+							<div className="space-y-2 text-sm">
+								<div className="flex items-center gap-1 text-gray-700">
+									<Clock className="w-3 h-3" />
+									<span className="font-medium">Début:</span>
+									<span>{formatDateTime(event.start)}</span>
+								</div>
+								<div className="flex items-center gap-1 text-gray-700">
+									<Clock className="w-3 h-3" />
+									<span className="font-medium">Fin:</span>
+									<span>{formatDateTime(event.stop)}</span>
+								</div>
+								<div className="text-sm text-gray-700">
+									<span className="font-medium">Description:</span> {event.description || 'Non spécifiée'}
+								</div>
+								<div className="flex items-center gap-1 text-sm text-gray-700">
+									<MapPin className="w-3 h-3" />
+									<span className="font-medium">Lieu:</span>
+									<span>{event.location || 'Non spécifié'}</span>
+								</div>
 							</div>
 						)}
 					</div>

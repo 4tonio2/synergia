@@ -228,6 +228,33 @@ async function handlePrepare(req: VercelRequest, res: VercelResponse) {
 		.filter((p) => p.status === 'matched' && p.partner_id)
 		.map((p) => p.partner_id as number);
 
+	// 3.1 When intent is update/cancel, try to identify the original event now to carry its ID forward
+	let foundEvent: any = null;
+	let foundEventId: number | string | null = null;
+	if ((intent === 'update' || intent === 'cancel') && eventMatch.original_start && matchedIds.length > 0) {
+		try {
+			const resp = await fetch('https://treeporteur-n8n.fr/webhook/FindEvent', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ original_start: eventMatch.original_start, participant_ids: matchedIds }),
+			});
+			if (resp.ok) {
+				foundEvent = await resp.json().catch(() => ({}));
+				foundEventId = foundEvent?.event_id ?? foundEvent?.id ?? null;
+				if (!foundEventId) {
+					warnings.push('ID de l\'événement original non trouvé');
+				}
+			} else {
+				const body = await resp.text().catch(() => '');
+				console.warn('[AGENDA] FindEvent non-ok:', resp.status, body);
+				warnings.push('Identification de l\'événement à modifier échouée');
+			}
+		} catch (e) {
+			console.error('[AGENDA] FindEvent error:', e);
+			warnings.push('Erreur lors de l\'identification de l\'événement');
+		}
+	}
+
 	// 4. Build response payload for modal
 	res.json({
 		to_validate: true,
@@ -240,10 +267,12 @@ async function handlePrepare(req: VercelRequest, res: VercelResponse) {
 			stop: stop || '',
 			description: (eventFromNLP.description ?? eventFromNLP.name ?? 'Rendez-vous') || 'Rendez-vous',
 			location: eventFromNLP.location || '',
+			event_id: foundEventId ?? undefined,
 		},
 		participants: participantMatches,
 		warnings,
 		raw_extraction: first,
+		found_event: foundEvent,
 	});
 }
 
