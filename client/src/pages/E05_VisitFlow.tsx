@@ -174,9 +174,12 @@ export default function E05_VisitFlow() {
 
 					// Traitement spécifique selon le type
 					if (currentRecordingType === 'agenda') {
-						// Pour l'agenda, on ne concatène pas aux notes, on lance le flux Agenda
+						// Pour l'agenda: ne pas ajouter de préfixe, et remplacer le champ "Notes de visite" par le texte entier
 						console.log('[AGENDA] Transcription reçue:', text);
-						handleTranscription('[AGENDA] ' + text, audioBlob); // Optionnel: garder une trace dans les notes? Le user veut "CRM" remplacé, donc garder la trace est mieux.
+						setFormData(prev => ({
+							...prev,
+							notesRaw: text
+						}));
 
 						// Lancer la préparation de l'agenda
 						setIsPreparingAgenda(true);
