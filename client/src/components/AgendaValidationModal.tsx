@@ -4,18 +4,11 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useCustomToast } from '@/hooks/useToast';
 
-// Interface for availability suggestion from the check-availability webhook
-interface AvailabilitySuggestion {
-	start: string;
-	stop: string;
-	reason?: string;
-}
-
 interface AvailabilityCheckResult {
 	success: boolean;
 	attempts: number;
-	suggestions: AvailabilitySuggestion[];
-	conflicts: any[];
+	start: string;
+	stop: string;
 	message: string;
 }
 
@@ -220,14 +213,22 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 			const result: AvailabilityCheckResult = await response.json();
 			console.log('[AGENDA] Availability check result:', result);
 
+			// Check if the returned time is different from the requested time
+			// This implies a suggestion/adjustment from the backend
+			const isTimeChanged = result.start !== localPayload.event.start || result.stop !== localPayload.event.stop;
+
 			setAvailabilityResult(result);
 
-			if (result.attempts > 0 && result.suggestions && result.suggestions.length > 0) {
-				// There are conflicts, show suggestions
+			if (result.attempts > 0 || isTimeChanged) {
+				// There are conflicts or a time change proposal
 				setShowSuggestions(true);
-				toast.warning(`⚠️ ${result.message}`);
+				if (result.attempts > 0) {
+					toast.warning(`⚠️ ${result.message}`);
+				} else {
+					toast.info("🕒 Un créneau différent est proposé.");
+				}
 			} else {
-				// No conflicts, proceed with confirmation
+				// No conflicts and no time change, proceed with confirmation
 				await confirmEvent(false);
 			}
 		} catch (error: any) {
@@ -237,8 +238,8 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 			setAvailabilityResult({
 				success: false,
 				attempts: 0,
-				suggestions: [],
-				conflicts: [],
+				start: localPayload.event.start,
+				stop: localPayload.event.stop,
 				message: 'Impossible de vérifier la disponibilité',
 			});
 		} finally {
@@ -289,12 +290,14 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 		await confirmEvent(true);
 	};
 
-	const handleSelectSuggestion = (suggestion: AvailabilitySuggestion) => {
+	const handleAcceptProposal = () => {
+		if (!availabilityResult) return;
+
 		// Update the event with the suggested time slot
 		const updatedEvent = {
 			...localPayload.event,
-			start: suggestion.start,
-			stop: suggestion.stop,
+			start: availabilityResult.start,
+			stop: availabilityResult.stop,
 		};
 
 		const updatedPayload = {
@@ -525,41 +528,47 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 					</div>
 
 					{/* Availability Suggestions Panel */}
-					{showSuggestions && availabilityResult && availabilityResult.suggestions.length > 0 && (
+					{showSuggestions && availabilityResult && (
 						<div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-3">
 							<div className="flex items-center gap-2 text-amber-800">
 								<RefreshCw className="w-4 h-4" />
-								<h4 className="font-semibold">Créneaux alternatifs suggérés</h4>
+								<h4 className="font-semibold">Vérification de disponibilité</h4>
 							</div>
-							<p className="text-sm text-amber-700">
-								Des conflits ont été détectés pour certains participants. Voici des créneaux alternatifs :
-							</p>
-							<div className="space-y-2">
-								{availabilityResult.suggestions.map((suggestion, index) => (
-									<div
-										key={index}
-										className="flex items-center justify-between bg-white border border-amber-200 rounded-lg p-3"
-									>
+
+							{availabilityResult.attempts > 0 && (
+								<p className="text-sm text-red-600 font-medium">
+									⚠️ {availabilityResult.message}
+								</p>
+							)}
+
+							{(availabilityResult.start !== event.start || availabilityResult.stop !== event.stop) ? (
+								<div className="space-y-3">
+									<p className="text-sm text-amber-700">
+										Un autre créneau est disponible :
+									</p>
+									<div className="flex items-center justify-between bg-white border border-amber-200 rounded-lg p-3">
 										<div className="text-sm">
-											<span className="font-medium">{formatDateTime(suggestion.start)}</span>
+											<span className="font-medium">{formatDateTime(availabilityResult.start)}</span>
 											<span className="text-gray-500 mx-2">→</span>
-											<span className="font-medium">{formatDateTime(suggestion.stop)}</span>
-											{suggestion.reason && (
-												<span className="text-gray-500 ml-2 text-xs">({suggestion.reason})</span>
-											)}
+											<span className="font-medium">{formatDateTime(availabilityResult.stop)}</span>
 										</div>
 										<Button
 											size="sm"
 											variant="outline"
-											onClick={() => handleSelectSuggestion(suggestion)}
+											onClick={handleAcceptProposal}
 											className="text-xs border-amber-400 text-amber-700 hover:bg-amber-100"
 										>
 											<Check className="w-3 h-3 mr-1" />
-											Utiliser
+											Accepter
 										</Button>
 									</div>
-								))}
-							</div>
+								</div>
+							) : (
+								<p className="text-sm text-amber-700">
+									Le créneau actuel est indisponible. Veuillez modifier l'heure manuellement ou forcer la création.
+								</p>
+							)}
+
 							<div className="flex gap-2 pt-2 border-t border-amber-200">
 								<Button
 									size="sm"
@@ -573,7 +582,7 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 									) : (
 										<AlertCircle className="w-3 h-3 mr-1" />
 									)}
-									Ignorer et créer quand même
+									Forcer la création
 								</Button>
 								<Button
 									size="sm"
