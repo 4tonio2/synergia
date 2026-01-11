@@ -280,7 +280,8 @@ async function handlePrepare(req: VercelRequest, res: VercelResponse) {
 			participant_ids: matchedIds,
 			start: start || '',
 			stop: stop || '',
-			description: (eventFromNLP.description ?? eventFromNLP.name ?? 'Rendez-vous') || 'Rendez-vous',
+			name: (eventFromNLP.name ?? eventFromNLP.description ?? 'Rendez-vous') || 'Rendez-vous',
+			description: (eventFromNLP.description ?? '') || '',
 			location: eventFromNLP.location || '',
 			event_id: foundEventId ?? undefined,
 		},
@@ -360,13 +361,15 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
 		skipAvailabilityCheck,
 	});
 
-	// Prepare payload for n8n webhook
+	// Prepare payload for n8n webhook (include title as name, plus location & description)
 	const webhookPayload = {
-		name: event.description || 'Rendez-vous',
+		name: event.name || event.description || 'Rendez-vous',
 		start: event.start,
 		stop: event.stop,
 		partner_id: 3,
 		partner_ids: event.participant_ids || [],
+		location: event.location || '',
+		description: event.description || '',
 	};
 
 	console.log('[AGENDA] Calling CreateCalendarEvent webhook with:', webhookPayload);
@@ -402,7 +405,7 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
 		message: 'Événement créé avec succès dans Odoo Agenda',
 		odoo_response: webhookResult,
 		summary: {
-			title: event.description || 'Rendez-vous',
+			title: event.name || event.description || 'Rendez-vous',
 			start: event.start,
 			stop: event.stop,
 			location: event.location || 'Non spécifié',

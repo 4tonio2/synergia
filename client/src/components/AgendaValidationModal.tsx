@@ -28,6 +28,7 @@ interface AgendaEvent {
 	participant_ids: number[];
 	start: string;
 	stop: string;
+	name?: string;
 	description: string;
 	location: string;
 	event_id?: number | string;
@@ -298,7 +299,7 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 					body: JSON.stringify({
 						action: 'update-event',
 						event_id: eventId,
-						name: localPayload.event.description,
+						name: localPayload.event.name || localPayload.event.description,
 						start: localPayload.event.start,
 						stop: localPayload.event.stop,
 						location: localPayload.event.location,
