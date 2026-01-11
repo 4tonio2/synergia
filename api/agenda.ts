@@ -10,8 +10,8 @@ const openai = new OpenAI({
 // Initialize Supabase client
 // Using RAG environment variables as in jambonz.ts, defaulting to standard if not present
 const supabase = createClient(
-	process.env.SUPABASE_URL_RAG || process.env.SUPABASE_URL || '',
-	process.env.SUPABASE_ANON_KEY_RAG || process.env.SUPABASE_ANON_KEY || ''
+	process.env.SUPABASE_URL_RAG || '',
+	process.env.SUPABASE_ANON_KEY_RAG || ''
 );
 
 // ============================================================
