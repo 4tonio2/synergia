@@ -1,10 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
 	apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Initialize Supabase client
+// Using RAG environment variables as in jambonz.ts, defaulting to standard if not present
+const supabase = createClient(
+	process.env.SUPABASE_URL_RAG || process.env.SUPABASE_URL || '',
+	process.env.SUPABASE_ANON_KEY_RAG || process.env.SUPABASE_ANON_KEY || ''
+);
 
 // ============================================================
 // Types
@@ -28,109 +36,26 @@ interface ParticipantMatch {
 	proposed_contact: { name: string; email: string | null; phone: string | null };
 }
 
+interface AvailabilityCheckResult {
+	success: boolean;
+	attempts: number;
+	start?: string;
+	stop?: string;
+	message?: string;
+}
+
+interface ContactMatch {
+	id: number;
+	contact_id: number;
+	name: string;
+	content: string;
+	metadata: any;
+	similarity: number;
+}
+
 // ============================================================
 // Utilities
 // ============================================================
-
-function normalizeForMatch(str: string): string {
-	if (!str) return '';
-	return str
-		.toLowerCase()
-		.normalize('NFD')
-		.replace(/[\u0300-\u036f]/g, '')
-		.replace(/[^a-z0-9\s]/g, '')
-		.replace(/\s+/g, ' ')
-		.trim();
-}
-
-function similarityScore(input: string, target: string): number {
-	const inputNorm = normalizeForMatch(input);
-	const targetNorm = normalizeForMatch(target);
-
-	if (inputNorm === targetNorm) return 1.0;
-	if (!inputNorm || !targetNorm) return 0;
-
-	const inputTokens = new Set(inputNorm.split(' '));
-	const targetTokens = new Set(targetNorm.split(' '));
-
-	let intersection = 0;
-	for (const token of inputTokens) {
-		if (targetTokens.has(token)) {
-			intersection++;
-		} else {
-			for (const tt of targetTokens) {
-				if (tt.startsWith(token) || token.startsWith(tt)) {
-					intersection += 0.5;
-					break;
-				}
-			}
-		}
-	}
-
-	const union = new Set([...inputTokens, ...targetTokens]).size;
-	return union > 0 ? intersection / union : 0;
-}
-
-function matchParticipants(
-	extractedNames: string[],
-	odooContacts: OdooParticipant[],
-	matchThreshold: number = 0.5,
-	ambiguousThreshold: number = 0.1
-): ParticipantMatch[] {
-	return extractedNames.map((inputName) => {
-		const scores = odooContacts.map((contact) => ({
-			partner_id: contact.id,
-			name: contact.name,
-			score: similarityScore(inputName, contact.name),
-		}));
-
-		scores.sort((a, b) => b.score - a.score);
-
-		const bestMatch = scores[0];
-		const secondBest = scores[1];
-
-		if (!bestMatch || bestMatch.score < matchThreshold) {
-			return {
-				input_name: inputName,
-				status: 'unmatched' as const,
-				partner_id: null,
-				matched_name: null,
-				score: bestMatch?.score || 0,
-				candidates: [],
-				needs_contact_creation: true,
-				proposed_contact: { name: inputName, email: null, phone: null },
-			};
-		}
-
-		if (
-			secondBest &&
-			secondBest.score > matchThreshold &&
-			bestMatch.score - secondBest.score < ambiguousThreshold
-		) {
-			return {
-				input_name: inputName,
-				status: 'ambiguous' as const,
-				partner_id: null,
-				matched_name: null,
-				score: bestMatch.score,
-				candidates: scores.filter((s) => s.score >= matchThreshold).slice(0, 3),
-				needs_contact_creation: false,
-				proposed_contact: { name: inputName, email: null, phone: null },
-			};
-		}
-
-		return {
-			input_name: inputName,
-			status: 'matched' as const,
-			partner_id: bestMatch.partner_id,
-			matched_name: bestMatch.name,
-			score: bestMatch.score,
-			candidates: [],
-			needs_contact_creation: false,
-			proposed_contact: { name: inputName, email: null, phone: null },
-		};
-	});
-}
 
 function addMinutesToTime(timeStr: string, minutes: number): string {
 	const [h, m, s] = timeStr.split(':').map(Number);
@@ -145,6 +70,150 @@ function formatDateOnly(date: Date): string {
 	const month = String(date.getMonth() + 1).padStart(2, '0');
 	const day = String(date.getDate()).padStart(2, '0');
 	return `${year}-${month}-${day}`;
+}
+
+// ============================================================
+// Vector Search Utilities
+// ============================================================
+
+/**
+ * Generate embedding for text using OpenAI
+ */
+async function generateEmbedding(text: string): Promise<number[]> {
+	const response = await openai.embeddings.create({
+		model: 'text-embedding-3-small',
+		input: text,
+	});
+	return response.data[0].embedding;
+}
+
+/**
+ * Match a single name against contacts using vector search
+ * Returns top matches sorted by similarity
+ */
+async function matchContactByVector(name: string, matchCount: number = 5): Promise<ContactMatch[]> {
+	console.log('[AGENDA] Vector search for:', name);
+
+	try {
+		const embedding = await generateEmbedding(name);
+
+		const { data, error } = await supabase.rpc('match_contact_name_embeddings', {
+			filter: {},
+			match_count: matchCount,
+			query_embedding: embedding,
+		});
+
+		if (error) {
+			console.error('[AGENDA] Vector search error:', error);
+			return [];
+		}
+
+		console.log('[AGENDA] Vector search results:', data?.length || 0, 'matches');
+		return (data as ContactMatch[]) || [];
+	} catch (error) {
+		console.error('[AGENDA] Error in vector search:', error);
+		return [];
+	}
+}
+
+/**
+ * Match participants using vector search
+ * This replaces the old fuzzy matching against all contacts
+ */
+async function matchParticipantsWithVector(
+	extractedNames: string[],
+	matchThreshold: number = 0.85, // Higher threshold for vector search confidence
+	ambiguousThreshold: number = 0.1
+): Promise<ParticipantMatch[]> {
+	if (!extractedNames || extractedNames.length === 0) return [];
+
+	console.log('[AGENDA] Matching participants via vector search:', extractedNames);
+
+	const results = await Promise.all(
+		extractedNames.map(async (inputName) => {
+			const matches = await matchContactByVector(inputName);
+
+			if (matches.length === 0) {
+				return {
+					input_name: inputName,
+					status: 'unmatched' as const,
+					partner_id: null,
+					matched_name: null,
+					score: 0,
+					candidates: [],
+					needs_contact_creation: true,
+					proposed_contact: { name: inputName, email: null, phone: null },
+				};
+			}
+
+			const bestMatch = matches[0];
+			const secondBest = matches[1];
+
+			// Check for high confidence match
+			if (bestMatch.similarity >= matchThreshold) {
+				// Check for ambiguity (two very similar scores)
+				if (secondBest && (bestMatch.similarity - secondBest.similarity < ambiguousThreshold)) {
+					return {
+						input_name: inputName,
+						status: 'ambiguous' as const,
+						partner_id: null,
+						matched_name: null,
+						score: bestMatch.similarity,
+						candidates: matches.slice(0, 3).map(m => ({
+							partner_id: m.contact_id,
+							name: m.name,
+							score: m.similarity
+						})),
+						needs_contact_creation: false,
+						proposed_contact: { name: inputName, email: null, phone: null },
+					};
+				}
+
+				return {
+					input_name: inputName,
+					status: 'matched' as const,
+					partner_id: bestMatch.contact_id,
+					matched_name: bestMatch.name,
+					score: bestMatch.similarity,
+					candidates: [],
+					needs_contact_creation: false,
+					proposed_contact: { name: inputName, email: null, phone: null },
+				};
+			}
+
+			// Low confidence matches -> Ambiguous or Unmatched
+			if (bestMatch.similarity > 0.6) { // Soft threshold for suggesting candidates
+				return {
+					input_name: inputName,
+					status: 'ambiguous' as const,
+					partner_id: null,
+					matched_name: null,
+					score: bestMatch.similarity,
+					candidates: matches.slice(0, 3).map(m => ({
+						partner_id: m.contact_id,
+						name: m.name,
+						score: m.similarity
+					})),
+					needs_contact_creation: false,
+					proposed_contact: { name: inputName, email: null, phone: null },
+				};
+			}
+
+			// No good match
+			return {
+				input_name: inputName,
+				status: 'unmatched' as const,
+				partner_id: null,
+				matched_name: null,
+				score: bestMatch.similarity,
+				candidates: [],
+				needs_contact_creation: true,
+				proposed_contact: { name: inputName, email: null, phone: null },
+			};
+		})
+	);
+
+	return results;
 }
 
 // ============================================================
@@ -179,6 +248,7 @@ RÈGLES IMPORTANTES:
 - Si l'heure mentionnée est déjà passée aujourd'hui, considère que c'est pour le lendemain
 - Tolère les fautes d'orthographe et les variantes de noms
 - "RDV" ou "rendez-vous" signifie une réunion
+- Ignore les titres comme "Docteur", "Monsieur", "Madame" dans les noms de participants si possible
 
 Réponds UNIQUEMENT avec le JSON, sans explication.`;
 
@@ -265,26 +335,13 @@ async function handlePrepare(req: VercelRequest, res: VercelResponse) {
 
 	console.log('[AGENDA] Preparing event from text:', text.substring(0, 100) + '...');
 
-	// 1. Fetch participants from n8n
-	const participantsResponse = await fetch('https://treeporteur-n8n.fr/webhook/GetParticipants', {
-		method: 'GET',
-	});
-
-	if (!participantsResponse.ok) {
-		console.error('[AGENDA] Failed to fetch participants');
-		return res.status(502).json({
-			error: 'Impossible de récupérer la liste des participants',
-		});
-	}
-
-	const participants = await participantsResponse.json() as OdooParticipant[];
-	console.log('[AGENDA] Got', participants.length, 'participants for matching');
-
-	// 2. Extract event with current date context
+	// 1. Extract event with current date context (Using LLM)
 	const currentDate = new Date();
 	const extracted = await extractEventFromText(text, currentDate);
 
-	// 3. Handle missing/default values
+	console.log('[AGENDA] Extracted data:', extracted);
+
+	// 2. Handle missing/default values
 	const warnings: string[] = [];
 	let start = extracted.start;
 	let stop = extracted.stop;
@@ -315,18 +372,19 @@ async function handlePrepare(req: VercelRequest, res: VercelResponse) {
 		warnings.push('Lieu non spécifié');
 	}
 
-	// 4. Match participants
-	const participantMatches = matchParticipants(extracted.participants, participants);
+	// 3. Match participants using Vector Search
+	// No longer running fuzzy match against all contacts
+	const participantMatches = await matchParticipantsWithVector(extracted.participants);
 
 	const matchedIds = participantMatches
 		.filter((p) => p.status === 'matched' && p.partner_id)
 		.map((p) => p.partner_id as number);
 
-	console.log('[AGENDA] Event prepared:', {
+	console.log('[AGENDA] Event prepared matches:', {
 		participants_count: participantMatches.length,
 		matched: participantMatches.filter((p) => p.status === 'matched').length,
+		ambiguous: participantMatches.filter((p) => p.status === 'ambiguous').length,
 		unmatched: participantMatches.filter((p) => p.status === 'unmatched').length,
-		warnings: warnings.length,
 	});
 
 	res.json({
@@ -374,16 +432,20 @@ async function handleCheckAvailability(req: VercelRequest, res: VercelResponse) 
 			});
 		}
 
-		const result = await response.json();
+		const result = await response.json() as AvailabilityCheckResult;
 		console.log('[AGENDA] Availability check result:', result);
+
+		// Ensure we pass back the start/stop from the webhook if available, otherwise use input
+		const confirmedStart = result.start || start;
+		const confirmedStop = result.stop || stop;
 
 		res.json({
 			success: true,
 			attempts: result.attempts || 0,
-			suggestions: result.suggestions || [],
-			conflicts: result.conflicts || [],
+			start: confirmedStart,
+			stop: confirmedStop,
 			message: result.attempts > 0
-				? `${result.attempts} conflit(s) détecté(s). Des créneaux alternatifs sont suggérés.`
+				? `${result.attempts} conflit(s) détecté(s).`
 				: 'Aucun conflit détecté, le créneau est disponible.',
 		});
 	} catch (error: any) {
