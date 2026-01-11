@@ -1,18 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-	apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Initialize Supabase client
-// Using RAG environment variables as in jambonz.ts, defaulting to standard if not present
-const supabase = createClient(
-	process.env.SUPABASE_URL_RAG || '',
-	process.env.SUPABASE_ANON_KEY_RAG || ''
-);
+// Note: legacy OpenAI and Supabase-based extraction/matching removed. All logic now uses external n8n webhooks.
 
 // ============================================================
 // Types
@@ -44,13 +32,24 @@ interface AvailabilityCheckResult {
 	message?: string;
 }
 
-interface ContactMatch {
-	id: number;
-	contact_id: number;
-	name: string;
-	content: string;
-	metadata: any;
-	similarity: number;
+// Legacy ContactMatch type removed along with vector matching.
+
+interface OdooCalendarNLPResult {
+	intent: 'create' | 'update' | 'cancel';
+	event: {
+		name?: string;
+		start?: string; // "YYYY-MM-DD HH:MM"
+		stop?: string;  // "YYYY-MM-DD HH:MM"
+		location?: string;
+		participants?: string[];
+		description?: string | null;
+	};
+	event_match?: {
+		original_start?: string;
+		original_stop?: string;
+		keywords?: string[];
+		participants?: string[];
+	};
 }
 
 // ============================================================
@@ -73,254 +72,10 @@ function formatDateOnly(date: Date): string {
 }
 
 // ============================================================
-// Vector Search Utilities
-// ============================================================
-
-/**
- * Generate embedding for text using OpenAI
- */
-async function generateEmbedding(text: string): Promise<number[]> {
-	const response = await openai.embeddings.create({
-		model: 'text-embedding-3-small',
-		input: text,
-	});
-	return response.data[0].embedding;
-}
-
-/**
- * Match a single name against contacts using vector search
- * Returns top matches sorted by similarity
- */
-async function matchContactByVector(name: string, matchCount: number = 5): Promise<ContactMatch[]> {
-	console.log('[AGENDA] Vector search for:', name);
-
-	try {
-		const embedding = await generateEmbedding(name);
-
-		const { data, error } = await supabase.rpc('match_contact_name_embeddings', {
-			filter: {},
-			match_count: matchCount,
-			query_embedding: embedding,
-		});
-
-		if (error) {
-			console.error('[AGENDA] Vector search error:', error);
-			return [];
-		}
-
-		console.log('[AGENDA] Vector search results:', data?.length || 0, 'matches');
-		return (data as ContactMatch[]) || [];
-	} catch (error) {
-		console.error('[AGENDA] Error in vector search:', error);
-		return [];
-	}
-}
-
-/**
- * Match participants using vector search
- * This replaces the old fuzzy matching against all contacts
- */
-async function matchParticipantsWithVector(
-	extractedNames: string[],
-	matchThreshold: number = 0.85, // Higher threshold for vector search confidence
-	ambiguousThreshold: number = 0.1
-): Promise<ParticipantMatch[]> {
-	if (!extractedNames || extractedNames.length === 0) return [];
-
-	console.log('[AGENDA] Matching participants via vector search:', extractedNames);
-
-	const results = await Promise.all(
-		extractedNames.map(async (inputName) => {
-			const matches = await matchContactByVector(inputName);
-
-			if (matches.length === 0) {
-				return {
-					input_name: inputName,
-					status: 'unmatched' as const,
-					partner_id: null,
-					matched_name: null,
-					score: 0,
-					candidates: [],
-					needs_contact_creation: true,
-					proposed_contact: { name: inputName, email: null, phone: null },
-				};
-			}
-
-			const bestMatch = matches[0];
-			const secondBest = matches[1];
-
-			// Check for high confidence match
-			if (bestMatch.similarity >= matchThreshold) {
-				// Check for ambiguity (two very similar scores)
-				if (secondBest && (bestMatch.similarity - secondBest.similarity < ambiguousThreshold)) {
-					return {
-						input_name: inputName,
-						status: 'ambiguous' as const,
-						partner_id: null,
-						matched_name: null,
-						score: bestMatch.similarity,
-						candidates: matches.slice(0, 3).map(m => ({
-							partner_id: m.contact_id,
-							name: m.name,
-							score: m.similarity
-						})),
-						needs_contact_creation: false,
-						proposed_contact: { name: inputName, email: null, phone: null },
-					};
-				}
-
-				return {
-					input_name: inputName,
-					status: 'matched' as const,
-					partner_id: bestMatch.contact_id,
-					matched_name: bestMatch.name,
-					score: bestMatch.similarity,
-					candidates: [],
-					needs_contact_creation: false,
-					proposed_contact: { name: inputName, email: null, phone: null },
-				};
-			}
-
-			// Low confidence matches -> Ambiguous or Unmatched
-			if (bestMatch.similarity > 0.6) { // Soft threshold for suggesting candidates
-				return {
-					input_name: inputName,
-					status: 'ambiguous' as const,
-					partner_id: null,
-					matched_name: null,
-					score: bestMatch.similarity,
-					candidates: matches.slice(0, 3).map(m => ({
-						partner_id: m.contact_id,
-						name: m.name,
-						score: m.similarity
-					})),
-					needs_contact_creation: false,
-					proposed_contact: { name: inputName, email: null, phone: null },
-				};
-			}
-
-			// No good match
-			return {
-				input_name: inputName,
-				status: 'unmatched' as const,
-				partner_id: null,
-				matched_name: null,
-				score: bestMatch.similarity,
-				candidates: [],
-				needs_contact_creation: true,
-				proposed_contact: { name: inputName, email: null, phone: null },
-			};
-		})
-	);
-
-	return results;
-}
+// Legacy vector search removed. Participant matching now relies on n8n contact lookup webhook.
 
 // ============================================================
-// LLM Extraction
-// ============================================================
-
-async function extractEventFromText(text: string, currentDate: Date) {
-	const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-	const currentDay = dayNames[currentDate.getDay()];
-	const currentDateTime = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')} ${String(currentDate.getHours()).padStart(2, '0')}:${String(currentDate.getMinutes()).padStart(2, '0')}`;
-
-	const prompt = `Tu es un assistant qui extrait les informations d'un rendez-vous à partir d'une phrase dictée en français.
-
-DATE ET HEURE ACTUELLES: ${currentDateTime}
-JOUR DE LA SEMAINE: ${currentDay}
-
-Extrais les informations suivantes au format JSON strict:
-- participants: tableau de noms de personnes (ne pas inclure "je", "moi", "nous")
-- start_date: la date au format "YYYY-MM-DD" (convertis les expressions relatives comme "demain", "mardi prochain" en dates réelles basées sur la date actuelle ci-dessus)
-- start_time: l'heure au format "HH:MM"
-- end_time: l'heure de fin si mentionnée, sinon null
-- duration_minutes: la durée en minutes si mentionnée (ex: "30 minutes" → 30), sinon null
-- description: une description courte du rendez-vous
-- location: le lieu si mentionné, sinon chaîne vide
-
-RÈGLES IMPORTANTES:
-- Utilise la date actuelle ci-dessus pour calculer les dates relatives
-- "demain" = date actuelle + 1 jour
-- "mardi prochain" = prochain mardi après la date actuelle
-- Si l'année n'est pas mentionnée, utilise l'année de la date actuelle
-- Assure-toi que les dates sont dans le FUTUR (pas dans le passé)
-- Si l'heure mentionnée est déjà passée aujourd'hui, considère que c'est pour le lendemain
-- Tolère les fautes d'orthographe et les variantes de noms
-- "RDV" ou "rendez-vous" signifie une réunion
-- Ignore les titres comme "Docteur", "Monsieur", "Madame" dans les noms de participants si possible
-
-Réponds UNIQUEMENT avec le JSON, sans explication.`;
-
-	console.log('[AGENDA] Extracting event with context:', { currentDateTime, currentDay });
-
-	const completion = await openai.chat.completions.create({
-		model: 'gpt-4o-mini',
-		messages: [
-			{ role: 'system', content: prompt },
-			{ role: 'user', content: text },
-		],
-		temperature: 0.1,
-		response_format: { type: 'json_object' },
-	});
-
-	const content = completion.choices[0]?.message?.content || '{}';
-
-	try {
-		const parsed = JSON.parse(content);
-		const participants = Array.isArray(parsed.participants) ? parsed.participants : [];
-
-		let startDate = parsed.start_date || null;
-		let startTime = parsed.start_time || null;
-		let stop: string | null = null;
-		const durationMinutes: number | null = parsed.duration_minutes || null;
-
-		// Normalize time format
-		if (startTime && /^\d{2}:\d{2}$/.test(startTime)) {
-			startTime = startTime + ':00';
-		}
-
-		// Calculate stop time
-		if (parsed.end_time) {
-			let endTime = parsed.end_time;
-			if (/^\d{2}:\d{2}$/.test(endTime)) {
-				endTime = endTime + ':00';
-			}
-			if (startDate) {
-				stop = `${startDate} ${endTime}`;
-			}
-		} else if (durationMinutes && startTime) {
-			const endTime = addMinutesToTime(startTime, durationMinutes);
-			if (startDate) {
-				stop = `${startDate} ${endTime}`;
-			}
-		}
-
-		let start: string | null = null;
-		if (startDate && startTime) {
-			start = `${startDate} ${startTime}`;
-		}
-
-		return {
-			participants,
-			start,
-			stop,
-			duration_minutes: durationMinutes,
-			description: parsed.description || '',
-			location: parsed.location || '',
-		};
-	} catch (e) {
-		console.error('[AGENDA] Failed to parse LLM response:', content, e);
-		return {
-			participants: [],
-			start: null,
-			stop: null,
-			duration_minutes: null,
-			description: '',
-			location: '',
-		};
-	}
-}
+// LLM extraction removed; external NLP webhook is the single source of truth.
 
 // ============================================================
 // Action Handlers
@@ -333,73 +88,162 @@ async function handlePrepare(req: VercelRequest, res: VercelResponse) {
 		return res.status(400).json({ error: 'Le texte est requis' });
 	}
 
-	console.log('[AGENDA] Preparing event from text:', text.substring(0, 100) + '...');
+	console.log('[AGENDA] Preparing event from text via external NLP:', text.substring(0, 100) + '...');
 
-	// 1. Extract event with current date context (Using LLM)
-	const currentDate = new Date();
-	const extracted = await extractEventFromText(text, currentDate);
-
-	console.log('[AGENDA] Extracted data:', extracted);
-
-	// 2. Handle missing/default values
+	// Collect warnings to return to client without failing
 	const warnings: string[] = [];
-	let start = extracted.start;
-	let stop = extracted.stop;
-	const durationMinutes = extracted.duration_minutes || 60;
 
-	if (!start) {
-		const today = formatDateOnly(currentDate);
-		const hours = currentDate.getHours();
-		const mins = currentDate.getMinutes();
-		const roundedMins = Math.ceil(mins / 15) * 15;
-		const startTime = `${String(hours).padStart(2, '0')}:${String(roundedMins % 60).padStart(2, '0')}:00`;
-		start = `${today} ${startTime}`;
-		warnings.push('Date/heure non spécifiée => maintenant');
+	// 1. Call external NLP webhook to analyze intent and event
+	let nlpItems: OdooCalendarNLPResult[] = [];
+	try {
+		const resp = await fetch('https://treeporteur-n8n.fr/webhook/odoo-calendar-nlp', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ text: text })
+		});
+		if (!resp.ok) {
+			const body = await resp.text().catch(() => '');
+			console.error('[AGENDA] odoo-calendar-nlp error:', resp.status, body);
+			warnings.push('Erreur NLP calendrier');
+			nlpItems = [];
+		}
+		if (resp.ok) {
+			const raw = await resp.json();
+			if (Array.isArray(raw)) {
+				nlpItems = raw as OdooCalendarNLPResult[];
+			} else if (raw && typeof raw === 'object') {
+				nlpItems = [raw as OdooCalendarNLPResult];
+			} else {
+				console.warn('[AGENDA] NLP webhook returned unexpected payload type');
+				warnings.push('Réponse NLP inattendue');
+				nlpItems = [];
+			}
+		}
+	} catch (err: any) {
+		console.error('[AGENDA] NLP webhook call failed:', err);
+		warnings.push('Erreur lors de l\'analyse du texte');
+		nlpItems = [];
 	}
 
+	const first = Array.isArray(nlpItems) && nlpItems.length > 0 ? nlpItems[0] : null;
+	if (!first) {
+		// Return minimal payload with warnings so client can display modal gracefully
+		warnings.push('Analyse NLP externe vide');
+		return res.json({
+			to_validate: false,
+			intent: 'create',
+			event_match: {},
+			event: {
+				partner_id: 3,
+				participant_ids: [],
+				start: '',
+				stop: '',
+				description: 'Rendez-vous',
+				location: '',
+			},
+			participants: [],
+			warnings,
+			raw_extraction: {},
+		});
+	}
+
+	const intent = first.intent;
+	const eventFromNLP = first.event || {};
+	const eventMatch = first.event_match || {};
+
+	// Normalize start/stop; default stop +1h if missing
+	let start = eventFromNLP.start || '';
+	let stop = eventFromNLP.stop || '';
+	// warnings already collected above
+
+	if (start && /^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(start)) {
+		start = start + ':00';
+	}
+	if (stop && /^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(stop)) {
+		stop = stop + ':00';
+	}
 	if (!stop && start) {
 		const [datePart, timePart] = start.split(' ');
 		if (timePart) {
-			const endTime = addMinutesToTime(timePart, durationMinutes);
-			stop = `${datePart} ${endTime}`;
-			if (!extracted.duration_minutes) {
-				warnings.push('Durée non spécifiée => durée par défaut 60 min');
-			}
+			stop = `${datePart} ${addMinutesToTime(timePart, 60)}`; // default +1h
+			warnings.push('Durée non spécifiée => durée par défaut 60 min');
 		}
 	}
+	if (!start) warnings.push('Date/heure non spécifiée');
+	if (!eventFromNLP.location) warnings.push('Lieu non spécifié');
 
-	if (!extracted.location) {
-		warnings.push('Lieu non spécifié');
+	// 2. Identify participants via external contact-lookup webhook using names
+	const names = (eventMatch.participants && Array.isArray(eventMatch.participants)) ? eventMatch.participants : (eventFromNLP.participants || []);
+	let lookupResults: Array<{ found: boolean; contact?: { id: string | number; name: string; email?: string | null; phone?: string | null } }>; 
+	lookupResults = [];
+	try {
+		if (names.length > 0) {
+			const resp = await fetch('https://treeporteur-n8n.fr/webhook/odoo-contact-lookup', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: names })
+			});
+			if (!resp.ok) {
+				const body = await resp.text().catch(() => '');
+				console.error('[AGENDA] odoo-contact-lookup error:', resp.status, body);
+				warnings.push('Recherche de participants échouée');
+			} else {
+				lookupResults = await resp.json() as Array<{ found: boolean; contact?: { id: string | number; name: string; email?: string | null; phone?: string | null } }>;
+			}
+		}
+	} catch (err) {
+		console.error('[AGENDA] Contact lookup failed:', err);
+		warnings.push('Recherche de participants échouée');
 	}
 
-	// 3. Match participants using Vector Search
-	// No longer running fuzzy match against all contacts
-	const participantMatches = await matchParticipantsWithVector(extracted.participants);
+	// 3. Build ParticipantMatch array from lookup results
+	const participantMatches = (names || []).map((input_name, idx) => {
+		const item = lookupResults[idx];
+		if (item && item.found && item.contact) {
+			const partnerId = typeof item.contact.id === 'string' ? parseInt(item.contact.id, 10) : item.contact.id;
+			return {
+				input_name,
+				status: 'matched' as const,
+				partner_id: partnerId,
+				matched_name: item.contact.name,
+				score: 1,
+				candidates: [],
+				needs_contact_creation: false,
+				proposed_contact: { name: input_name, email: item.contact.email || null, phone: item.contact.phone || null },
+			};
+		}
+		return {
+			input_name,
+			status: 'unmatched' as const,
+			partner_id: null,
+			matched_name: null,
+			score: 0,
+			candidates: [],
+			needs_contact_creation: true,
+			proposed_contact: { name: input_name, email: null, phone: null },
+		};
+	});
 
 	const matchedIds = participantMatches
 		.filter((p) => p.status === 'matched' && p.partner_id)
 		.map((p) => p.partner_id as number);
 
-	console.log('[AGENDA] Event prepared matches:', {
-		participants_count: participantMatches.length,
-		matched: participantMatches.filter((p) => p.status === 'matched').length,
-		ambiguous: participantMatches.filter((p) => p.status === 'ambiguous').length,
-		unmatched: participantMatches.filter((p) => p.status === 'unmatched').length,
-	});
-
+	// 4. Build response payload for modal
 	res.json({
 		to_validate: true,
+		intent,
+		event_match: eventMatch,
 		event: {
 			partner_id: 3,
 			participant_ids: matchedIds,
 			start: start || '',
 			stop: stop || '',
-			description: extracted.description || 'Rendez-vous',
-			location: extracted.location || '',
+			description: (eventFromNLP.description ?? eventFromNLP.name ?? 'Rendez-vous') || 'Rendez-vous',
+			location: eventFromNLP.location || '',
 		},
 		participants: participantMatches,
 		warnings,
-		raw_extraction: extracted,
+		raw_extraction: first,
 	});
 }
 
@@ -524,6 +368,111 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
 	});
 }
 
+async function handleFindEvent(req: VercelRequest, res: VercelResponse) {
+	const { original_start, participant_ids } = req.body as { original_start?: string; participant_ids?: number[] };
+
+	if (!original_start || !participant_ids || participant_ids.length === 0) {
+		return res.status(400).json({ error: 'original_start et participant_ids sont requis' });
+	}
+
+	console.log('[AGENDA] Finding event:', { original_start, participant_ids });
+
+	const response = await fetch('https://treeporteur-n8n.fr/webhook/FindEvent', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ original_start, participant_ids }),
+	});
+
+	if (!response.ok) {
+		const body = await response.text().catch(() => '');
+		console.error('[AGENDA] FindEvent error:', response.status, body);
+		return res.status(502).json({ error: 'Erreur lors de l\'identification de l\'événement', details: body });
+	}
+
+	const data = await response.json().catch(() => ({}));
+	res.json(data);
+}
+
+async function handleUpdateEvent(req: VercelRequest, res: VercelResponse) {
+	const { event_id, name, start, stop, location, description } = req.body as {
+		event_id?: number | string;
+		name?: string;
+		start?: string;
+		stop?: string;
+		location?: string;
+		description?: string | null;
+	};
+
+	if (!event_id) {
+		return res.status(400).json({ error: "event_id requis pour la mise à jour" });
+	}
+
+	// Default stop +1h if missing and start provided
+	let computedStart = start || '';
+	let computedStop = stop || '';
+	if (computedStart && /^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(computedStart)) {
+		computedStart = computedStart + ':00';
+	}
+	if (computedStop && /^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(computedStop)) {
+		computedStop = computedStop + ':00';
+	}
+	if (!computedStop && computedStart) {
+		const [datePart, timePart] = computedStart.split(' ');
+		if (timePart) {
+			computedStop = `${datePart} ${addMinutesToTime(timePart, 60)}`;
+		}
+	}
+
+	const payload = {
+		event_id,
+		name,
+		start: computedStart || start,
+		stop: computedStop || stop,
+		location,
+		description,
+	};
+
+	console.log('[AGENDA] Updating event:', payload);
+
+	const response = await fetch('https://treeporteur-n8n.fr/webhook/update-event', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload),
+	});
+
+	if (!response.ok) {
+		const body = await response.text().catch(() => '');
+		console.error('[AGENDA] update-event error:', response.status, body);
+		return res.status(502).json({ error: 'Erreur lors de la mise à jour de l\'événement', details: body });
+	}
+
+	const data = await response.json().catch(() => ({}));
+	res.json({ success: true, odoo_response: data });
+}
+
+async function handleDeleteEvent(req: VercelRequest, res: VercelResponse) {
+	const { event_id } = req.body as { event_id?: number | string };
+	if (!event_id) {
+		return res.status(400).json({ error: 'event_id requis pour la suppression' });
+	}
+
+	console.log('[AGENDA] Deleting event:', { event_id });
+
+	const response = await fetch('https://treeporteur-n8n.fr/webhook/DeleteCalendarEvent', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ event_id }),
+	});
+
+	if (!response.ok) {
+		const body = await response.text().catch(() => '');
+		console.error('[AGENDA] DeleteCalendarEvent error:', response.status, body);
+		return res.status(502).json({ error: 'Erreur lors de la suppression de l\'événement', details: body });
+	}
+
+	const data = await response.json().catch(() => ({}));
+	res.json({ success: true, odoo_response: data });
+}
 async function handleParticipants(req: VercelRequest, res: VercelResponse) {
 	console.log('[AGENDA] Fetching participants from n8n GetParticipants webhook...');
 
@@ -609,7 +558,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 	try {
 		// Get action from query (GET) or body (POST)
-		const action = (req.query.action as string) || (req.body?.action as string);
+	const action = (req.query.action as string) || (req.body?.action as string);
 
 		if (!action) {
 			return res.status(400).json({
@@ -649,10 +598,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 				}
 				return await handleCreateContact(req, res);
 
+			case 'find-event':
+				if (req.method !== 'POST') {
+					return res.status(405).json({ error: 'Method not allowed for find-event' });
+				}
+				return await handleFindEvent(req, res);
+
+			case 'update-event':
+				if (req.method !== 'POST') {
+					return res.status(405).json({ error: 'Method not allowed for update-event' });
+				}
+				return await handleUpdateEvent(req, res);
+
+			case 'delete-event':
+				if (req.method !== 'POST') {
+					return res.status(405).json({ error: 'Method not allowed for delete-event' });
+				}
+				return await handleDeleteEvent(req, res);
+
 			default:
 				return res.status(400).json({
 					error: `Action inconnue: ${action}`,
-					availableActions: ['prepare', 'confirm', 'check-availability', 'participants', 'create-contact']
+					availableActions: ['prepare', 'confirm', 'check-availability', 'participants', 'create-contact', 'find-event', 'update-event', 'delete-event']
 				});
 		}
 	} catch (error: any) {

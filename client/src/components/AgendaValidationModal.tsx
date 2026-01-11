@@ -34,10 +34,17 @@ interface AgendaEvent {
 
 interface AgendaValidationPayload {
 	to_validate: boolean;
+	intent?: 'create' | 'update' | 'cancel';
 	event: AgendaEvent;
 	participants: ParticipantMatch[];
 	warnings: string[];
 	raw_extraction: any;
+	event_match?: {
+		original_start?: string;
+		original_stop?: string;
+		keywords?: string[];
+		participants?: string[];
+	};
 }
 
 interface AgendaValidationModalProps {
@@ -169,81 +176,151 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 	};
 
 	const handleConfirm = async () => {
-		// First, check availability
-		setIsCheckingAvailability(true);
-		setAvailabilityResult(null);
-		setShowSuggestions(false);
+		// Branch by intent: create (with availability check), update (find + update), cancel (find + delete)
+		const intent = localPayload.intent || 'create';
 
+		if (intent === 'create') {
+			// First, check availability
+			setIsCheckingAvailability(true);
+			setAvailabilityResult(null);
+			setShowSuggestions(false);
+
+			try {
+				// Get all participant IDs (matched ones)
+				const contactIds = localPayload.participants
+					.filter((p: ParticipantMatch) => p.status === 'matched' && p.partner_id)
+					.map((p: ParticipantMatch) => p.partner_id as number);
+
+				// Also include event participant_ids
+				const allContactIds = [...new Set([...contactIds, ...localPayload.event.participant_ids])];
+
+				if (allContactIds.length === 0) {
+					// No participants to check, proceed directly
+					await confirmEvent(false);
+					return;
+				}
+
+				console.log('[AGENDA] Checking availability for:', {
+					contact_ids: allContactIds,
+					start: localPayload.event.start,
+					stop: localPayload.event.stop
+				});
+
+				const response = await fetch('/api/agenda', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						action: 'check-availability',
+						contact_ids: allContactIds,
+						start: localPayload.event.start,
+						stop: localPayload.event.stop,
+					}),
+				});
+
+				if (!response.ok) {
+					throw new Error('Erreur lors de la vérification de disponibilité');
+				}
+
+				const result: AvailabilityCheckResult = await response.json();
+				console.log('[AGENDA] Availability check result:', result);
+
+				const isTimeChanged = result.start !== localPayload.event.start || result.stop !== localPayload.event.stop;
+
+				setAvailabilityResult(result);
+
+				if (result.attempts > 0 || isTimeChanged) {
+					setShowSuggestions(true);
+					if (result.attempts > 0) {
+						toast.warning(`⚠️ ${result.message}`);
+					} else {
+						toast.info('🕒 Un créneau différent est proposé.');
+					}
+				} else {
+					await confirmEvent(false);
+				}
+			} catch (error: any) {
+				console.error('[AGENDA] Error checking availability:', error);
+				toast.error(error.message || 'Erreur lors de la vérification de disponibilité');
+				setAvailabilityResult({
+					success: false,
+					attempts: 0,
+					start: localPayload.event.start,
+					stop: localPayload.event.stop,
+					message: 'Impossible de vérifier la disponibilité',
+				});
+			} finally {
+				setIsCheckingAvailability(false);
+			}
+			return;
+		}
+
+		// For update/cancel: find event ID then update/delete
+		setIsConfirming(true);
 		try {
-			// Get all participant IDs (matched ones)
-			const contactIds = localPayload.participants
-				.filter((p: ParticipantMatch) => p.status === 'matched' && p.partner_id)
-				.map((p: ParticipantMatch) => p.partner_id as number);
-
-			// Also include event participant_ids
-			const allContactIds = [...new Set([...contactIds, ...localPayload.event.participant_ids])];
-
-			if (allContactIds.length === 0) {
-				// No participants to check, proceed directly
-				await confirmEvent(false);
-				return;
+			const originalStart = localPayload.event_match?.original_start;
+			const participantIds = localPayload.event.participant_ids || [];
+			if (!originalStart || participantIds.length === 0) {
+				throw new Error('Informations insuffisantes pour identifier l\'événement (start ou participants manquants)');
 			}
 
-			console.log('[AGENDA] Checking availability for:', {
-				contact_ids: allContactIds,
-				start: localPayload.event.start,
-				stop: localPayload.event.stop
-			});
-
-			const response = await fetch('/api/agenda', {
+			const findResp = await fetch('/api/agenda', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					action: 'check-availability',
-					contact_ids: allContactIds,
-					start: localPayload.event.start,
-					stop: localPayload.event.stop,
+					action: 'find-event',
+					original_start: originalStart,
+					participant_ids: participantIds,
 				}),
 			});
-
-			if (!response.ok) {
-				throw new Error('Erreur lors de la vérification de disponibilité');
+			if (!findResp.ok) {
+				throw new Error('Erreur lors de l\'identification de l\'événement');
+			}
+			const findData = await findResp.json();
+			const eventId = findData?.event_id || findData?.id;
+			if (!eventId) {
+				throw new Error('Événement introuvable');
 			}
 
-			const result: AvailabilityCheckResult = await response.json();
-			console.log('[AGENDA] Availability check result:', result);
-
-			// Check if the returned time is different from the requested time
-			// This implies a suggestion/adjustment from the backend
-			const isTimeChanged = result.start !== localPayload.event.start || result.stop !== localPayload.event.stop;
-
-			setAvailabilityResult(result);
-
-			if (result.attempts > 0 || isTimeChanged) {
-				// There are conflicts or a time change proposal
-				setShowSuggestions(true);
-				if (result.attempts > 0) {
-					toast.warning(`⚠️ ${result.message}`);
-				} else {
-					toast.info("🕒 Un créneau différent est proposé.");
+			if (intent === 'update') {
+				const updateResp = await fetch('/api/agenda', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						action: 'update-event',
+						event_id: eventId,
+						name: localPayload.event.description,
+						start: localPayload.event.start,
+						stop: localPayload.event.stop,
+						location: localPayload.event.location,
+						description: localPayload.event.description,
+					}),
+				});
+				if (!updateResp.ok) {
+					throw new Error('Erreur lors de la mise à jour de l\'événement');
 				}
-			} else {
-				// No conflicts and no time change, proceed with confirmation
-				await confirmEvent(false);
+				toast.success('Événement mis à jour avec succès');
+				onClose();
+				return;
+			}
+
+			if (intent === 'cancel') {
+				const delResp = await fetch('/api/agenda', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ action: 'delete-event', event_id: eventId }),
+				});
+				if (!delResp.ok) {
+					throw new Error('Erreur lors de l\'annulation de l\'événement');
+				}
+				toast.success('Événement annulé avec succès');
+				onClose();
+				return;
 			}
 		} catch (error: any) {
-			console.error('[AGENDA] Error checking availability:', error);
-			toast.error(error.message || 'Erreur lors de la vérification de disponibilité');
-			// On error, we could still allow the user to force create
-			setAvailabilityResult({
-				success: false,
-				attempts: 0,
-				start: localPayload.event.start,
-				stop: localPayload.event.stop,
-				message: 'Impossible de vérifier la disponibilité',
-			});
+			console.error('[AGENDA] Update/Cancel error:', error);
+			toast.error(error.message || 'Erreur lors du traitement de l\'événement');
 		} finally {
-			setIsCheckingAvailability(false);
+			setIsConfirming(false);
 		}
 	};
 
@@ -326,6 +403,8 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 	};
 
 	const allMatched = participants.every(p => p.status === 'matched');
+	const isUpdate = (localPayload.intent || 'create') === 'update';
+	const isCancel = (localPayload.intent || 'create') === 'cancel';
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
@@ -349,7 +428,7 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 					<div className="bg-indigo-50 rounded-xl p-4 space-y-2">
 						<h3 className="font-semibold text-indigo-800 flex items-center gap-2">
 							<Calendar className="w-4 h-4" />
-							Détails de l'événement
+							{isUpdate ? "Modifier l'événement" : isCancel ? "Annuler l'événement" : "Détails de l'événement"}
 						</h3>
 						<div className="grid grid-cols-2 gap-2 text-sm">
 							<div className="flex items-center gap-1 text-gray-700">
@@ -371,6 +450,15 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 							<span className="font-medium">Lieu:</span>
 							<span>{event.location || 'Non spécifié'}</span>
 						</div>
+						{isUpdate && (
+							<div className="mt-2 text-xs text-gray-600">
+								<div className="font-medium">Événement original</div>
+								<div>Début: {formatDateTime(localPayload.event_match?.original_start || '')}</div>
+								{localPayload.event_match?.original_stop && (
+									<div>Fin: {formatDateTime(localPayload.event_match?.original_stop)}</div>
+								)}
+							</div>
+						)}
 					</div>
 
 					{/* Warnings */}
@@ -600,10 +688,10 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 					<div className="flex gap-3 pt-2">
 						<Button
 							onClick={handleConfirm}
-							disabled={isConfirming || isCheckingAvailability || showSuggestions}
+							disabled={isConfirming || (localPayload.intent !== 'create' ? false : (isCheckingAvailability || showSuggestions))}
 							className="flex-1 bg-indigo-600 hover:bg-indigo-700"
 						>
-							{isCheckingAvailability ? (
+							{localPayload.intent === 'create' && isCheckingAvailability ? (
 								<>
 									<Loader2 className="w-4 h-4 mr-2 animate-spin" />
 									Vérification...
@@ -611,12 +699,12 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 							) : isConfirming ? (
 								<>
 									<Loader2 className="w-4 h-4 mr-2 animate-spin" />
-									Création...
+									{isUpdate ? 'Mise à jour...' : isCancel ? 'Annulation...' : 'Création...'}
 								</>
 							) : (
 								<>
 									<Check className="w-4 h-4 mr-2" />
-									Confirmer
+									{isUpdate ? 'Confirmer la mise à jour' : isCancel ? 'Confirmer l\'annulation' : 'Confirmer'}
 								</>
 							)}
 						</Button>
@@ -629,7 +717,7 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 						</Button>
 					</div>
 
-					{!allMatched && (
+					{!allMatched && localPayload.intent === 'create' && (
 						<p className="text-xs text-gray-500 text-center">
 							💡 Vous pouvez confirmer même si certains participants ne sont pas encore matchés
 						</p>

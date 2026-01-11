@@ -118,7 +118,7 @@ export default function E05_VisitFlow() {
 		}));
 	};
 
-	const startRecording = async (type: 'crm' | 'prescription' | 'observation') => {
+	const startRecording = async (type: 'agenda' | 'prescription' | 'observation') => {
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
