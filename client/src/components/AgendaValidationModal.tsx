@@ -479,6 +479,9 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 							</div>
 						) : (
 							<div className="space-y-2 text-sm">
+								<div className="text-sm text-gray-700">
+									<span className="font-medium">Titre:</span> {event.name || 'Sans titre'}
+								</div>
 								<div className="flex items-center gap-1 text-gray-700">
 									<Clock className="w-3 h-3" />
 									<span className="font-medium">Début:</span>
