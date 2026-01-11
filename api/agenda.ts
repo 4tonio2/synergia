@@ -239,8 +239,23 @@ async function handlePrepare(req: VercelRequest, res: VercelResponse) {
 				body: JSON.stringify({ original_start: eventMatch.original_start, participant_ids: matchedIds }),
 			});
 			if (resp.ok) {
-				foundEvent = await resp.json().catch(() => ({}));
-				foundEventId = foundEvent?.event_id ?? foundEvent?.id ?? null;
+				const raw = await resp.json().catch(() => ({}));
+				// n8n FindEvent returns an array like: [{ found: true, event: { id, name, start, stop, ... } }]
+				if (Array.isArray(raw) && raw.length > 0) {
+					const firstItem = raw[0];
+					if (firstItem && firstItem.event) {
+						foundEvent = firstItem.event;
+						// id may be string; keep as-is or cast to number if numeric
+						const idVal = firstItem.event.id;
+						foundEventId = idVal ?? null;
+					} else {
+						foundEvent = raw;
+						foundEventId = null;
+					}
+				} else if (raw && typeof raw === 'object') {
+					foundEvent = raw;
+					foundEventId = (raw as any)?.event_id ?? (raw as any)?.id ?? null;
+				}
 				if (!foundEventId) {
 					warnings.push('ID de l\'événement original non trouvé');
 				}

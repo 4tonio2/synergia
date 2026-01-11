@@ -280,7 +280,12 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 					throw new Error('Erreur lors de l\'identification de l\'événement');
 				}
 				const findData = await findResp.json();
-				eventId = findData?.event_id || findData?.id || null;
+				if (Array.isArray(findData) && findData.length > 0) {
+					const firstItem = findData[0];
+					eventId = firstItem?.event?.event_id || firstItem?.event?.id || null;
+				} else {
+					eventId = findData?.event_id || findData?.id || null;
+				}
 			}
 			if (!eventId) {
 				throw new Error('Événement introuvable');
