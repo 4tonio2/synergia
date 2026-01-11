@@ -174,11 +174,11 @@ export default function E05_VisitFlow() {
 
 					// Traitement spécifique selon le type
 					if (currentRecordingType === 'agenda') {
-						// Pour l'agenda: ne pas ajouter de préfixe, et remplacer le champ "Notes de visite" par le texte entier
+						// Pour l'agenda: ne pas ajouter de préfixe, et CONCATÉNER la transcription aux notes existantes
 						console.log('[AGENDA] Transcription reçue:', text);
 						setFormData(prev => ({
 							...prev,
-							notesRaw: text
+							notesRaw: (prev.notesRaw || '') + text
 						}));
 
 						// Lancer la préparation de l'agenda
@@ -187,7 +187,8 @@ export default function E05_VisitFlow() {
 							const resp = await fetch('/api/agenda', {
 								method: 'POST',
 								headers: { 'Content-Type': 'application/json' },
-								body: JSON.stringify({ action: 'prepare', text: text }) // Envoyer juste le nouveau texte pour l'extraction
+								// Envoyer le texte COMPLET (notes existantes + transcription agenda)
+								body: JSON.stringify({ action: 'prepare', text: existingText + text })
 							});
 							if (!resp.ok) {
 								throw new Error('Erreur lors de la préparation de l\'agenda');
