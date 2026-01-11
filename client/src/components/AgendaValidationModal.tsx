@@ -439,13 +439,13 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 				</div>
 
 				<div className="px-6 py-4 space-y-4">
-					{/* Event Summary with Before/After for update/cancel */}
+					{/* Event Summary with specific layouts per intent */}
 					<div className="bg-indigo-50 rounded-xl p-4 space-y-2">
 						<h3 className="font-semibold text-indigo-800 flex items-center gap-2">
 							<Calendar className="w-4 h-4" />
 							{isUpdate ? "Modifier l'événement" : isCancel ? "Annuler l'événement" : "Détails de l'événement"}
 						</h3>
-						{isUpdate || isCancel ? (
+						{isUpdate ? (
 							<div className="grid grid-cols-2 gap-3">
 								<div className="bg-white rounded-lg border border-indigo-200 p-3">
 									<h4 className="text-sm font-semibold text-indigo-700">Avant</h4>
@@ -464,6 +464,16 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 										<div className="text-gray-700"><span className="font-medium">Description:</span> {event.description || '—'}</div>
 										<div className="flex items-center gap-1"><MapPin className="w-3 h-3" /><span className="font-medium">Lieu:</span><span>{event.location || '—'}</span></div>
 									</div>
+								</div>
+							</div>
+						) : isCancel ? (
+							<div className="bg-white rounded-lg border border-red-200 p-3">
+								<h4 className="text-sm font-semibold text-red-700">Événement à annuler</h4>
+								<div className="mt-1 text-xs text-gray-700 space-y-1">
+									<div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span className="font-medium">Début:</span><span>{formatDateTime(originalStartDisplay)}</span></div>
+									{originalStopDisplay && <div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span className="font-medium">Fin:</span><span>{formatDateTime(originalStopDisplay)}</span></div>}
+									<div className="text-gray-700"><span className="font-medium">Description:</span> {originalDescDisplay || '—'}</div>
+									<div className="flex items-center gap-1"><MapPin className="w-3 h-3" /><span className="font-medium">Lieu:</span><span>{originalLocationDisplay || '—'}</span></div>
 								</div>
 							</div>
 						) : (
