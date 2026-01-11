@@ -441,18 +441,7 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 				</div>
 
 				<div className="px-6 py-4 space-y-4">
-					{/* Loading state inside modal to avoid waiting on main screen */}
-					{localPayload.loading && (
-						<div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-2">
-							<Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-							<div className="text-sm text-blue-800">
-								Préparation de l'événement...
-								{isUpdate && ' (mise à jour)'}
-								{isCancel && ' (annulation)'}
-								<div className="text-xs text-blue-700 mt-1">Recherche des participants en cours...</div>
-							</div>
-						</div>
-					)}
+					{/* Hint: we can show small loaders next to contacts while they resolve (if needed) */}
 					{/* Event Summary with specific layouts per intent */}
 					<div className="bg-indigo-50 rounded-xl p-4 space-y-2">
 						<h3 className="font-semibold text-indigo-800 flex items-center gap-2">
@@ -570,6 +559,12 @@ export function AgendaValidationModal({ isOpen, onClose, payload, onRefreshPaylo
 												{participant.status === 'matched' && participant.matched_name && (
 													<span className="text-green-600 ml-2">
 														✓ {participant.matched_name} (ID: {participant.partner_id})
+													</span>
+												)}
+												{participant.status !== 'matched' && (
+													<span className="ml-2 text-gray-400 inline-flex items-center gap-1">
+														<Loader2 className="w-3 h-3 animate-spin" />
+														Recherche du contact...
 													</span>
 												)}
 											</div>

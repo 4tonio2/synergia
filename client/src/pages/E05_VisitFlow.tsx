@@ -181,28 +181,11 @@ export default function E05_VisitFlow() {
 							notesRaw: (prev.notesRaw || '') + text
 						}));
 
-						// Lancer la préparation de l'agenda
+						// Lancer la préparation de l'agenda après transcription
 						setIsPreparingAgenda(true);
-						// Ouvrir la modale immédiatement avec un payload de chargement
-						setAgendaPayload({
-							to_validate: true,
-							intent: 'create',
-							event: {
-								partner_id: 3,
-								participant_ids: [],
-								start: '',
-								stop: '',
-								name: 'Préparation de l\'événement...',
-								description: '',
-								location: '',
-							},
-							participants: [],
-							warnings: [],
-							raw_extraction: null,
-							loading: true,
-						});
-						setShowAgendaModal(true);
-
+						// Fin de la transcription, passer à l'analyse
+						setIsProcessing(false);
+						setIsLoadingWebhook(true);
 						try {
 							const resp = await fetch('/api/agenda', {
 								method: 'POST',
@@ -214,12 +197,14 @@ export default function E05_VisitFlow() {
 								throw new Error('Erreur lors de la préparation de l\'agenda');
 							}
 							const payload = await resp.json();
-							setAgendaPayload({ ...payload, loading: false });
+							setAgendaPayload(payload);
+							setShowAgendaModal(true);
 						} catch (err: any) {
 							console.error('[AGENDA] Erreur:', err);
 							toast.error(err.message || 'Erreur Agenda');
 						} finally {
 							setIsPreparingAgenda(false);
+							setIsLoadingWebhook(false);
 						}
 
 					} else {
