@@ -140,17 +140,29 @@ function formatDateForSpeech(dateStr: string): string {
 	}
 }
 
+/**
+ * Normalize phone number format: convert 00XXX to +XXX
+ * Jambonz sends phone numbers with 00 prefix instead of +
+ */
+function normalizePhoneNumber(phone: string): string {
+	if (phone.startsWith('00')) {
+		return '+' + phone.slice(2);
+	}
+	return phone;
+}
+
 // ============================================================
 // API Calls
 // ============================================================
 
 async function identifyCallerByPhone(phone: string): Promise<CallerInfo | null> {
-	console.log('[JAMBONZ] Identifying caller by phone:', phone);
+	const normalizedPhone = normalizePhoneNumber(phone);
+	console.log('[JAMBONZ] Identifying caller by phone:', phone, '-> normalized:', normalizedPhone);
 	try {
 		const response = await fetch('https://treeporteur-n8n.fr/webhook/AuthContact', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ identifier: phone }),
+			body: JSON.stringify({ identifier: normalizedPhone }),
 		});
 
 		if (!response.ok) {
@@ -198,7 +210,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
 	return response.data[0].embedding;
 }
 
-async function matchContactByEmbedding(name: string, matchCount: number = 5): Promise<ContactEmbeddingMatch[]> {
+async function matchContactByEmbedding(name: string, matchCount: number = 7): Promise<ContactEmbeddingMatch[]> {
 	console.log('[JAMBONZ] Vector search for:', name);
 	try {
 		const embedding = await generateEmbedding(name);
@@ -351,13 +363,17 @@ function handleMainMenu(req: Request, res: Response) {
 	if (payload.digits === '1') {
 		console.log('[JAMBONZ] User chose to create appointment');
 		const response: JambonzVerb[] = [
-			{ verb: 'say', text: 'Parfait! Dites-moi les détails de votre rendez-vous. Par exemple: avec qui, quand, où et pour quelle raison?' },
+			{ verb: 'say', text: 'Parfait! Dites-moi les détails de votre rendez-vous. Par exemple: avec qui, quand, où et pour quelle raison? Après le bip, je vous écoute.' },
+			{ verb: 'pause', length: 0.5 },
+			{ verb: 'play', url: 'tone:350;w=0.2' },
 			{
 				verb: 'gather',
 				input: ['speech'],
 				actionHook: `${baseUrl}/api/jambonz?action=process-booking${callerParams}`,
-				timeout: 15,
-				say: { text: 'Je vous écoute attentivement.' }
+				timeout: 30,
+				minBargeinWordCount: 5,
+				finishOnKey: '#',
+				speechTimeout: 3
 			}
 		];
 		return res.status(200).json(response);
@@ -558,13 +574,25 @@ async function handleProcessBooking(req: Request, res: Response) {
 
 			const participantMatches: ParticipantMatch[] = [];
 
+			console.log('[JAMBONZ] === CONTACT MATCHING START ===');
+			console.log('[JAMBONZ] Names to match:', eventInfo.names);
+			console.log('[JAMBONZ] Thresholds - SIMILARITY:', SIMILARITY_THRESHOLD, 'PERFECT:', PERFECT_MATCH_THRESHOLD);
+
 			if (eventInfo.names.length > 0) {
 				const vectorResults = await matchMultipleContactsParallel(eventInfo.names);
 
 				for (const [inputName, matches] of Array.from(vectorResults.entries())) {
+					console.log(`[JAMBONZ] --- Matching "${inputName}" ---`);
+					console.log(`[JAMBONZ] Raw results (${matches.length} found):`);
+					matches.slice(0, 5).forEach((m, i) => {
+						console.log(`[JAMBONZ]   ${i + 1}. "${m.name}" (id: ${m.contact_id}) - score: ${m.similarity.toFixed(4)}`);
+					});
+
 					const filteredMatches = matches.filter(m => m.similarity >= SIMILARITY_THRESHOLD);
+					console.log(`[JAMBONZ] After threshold filter (>= ${SIMILARITY_THRESHOLD}): ${filteredMatches.length} matches`);
 
 					if (filteredMatches.length === 0) {
+						console.log(`[JAMBONZ] DECISION: UNMATCHED - No match above threshold`);
 						participantMatches.push({
 							input_name: inputName,
 							status: 'unmatched',
@@ -574,6 +602,7 @@ async function handleProcessBooking(req: Request, res: Response) {
 							candidates: [],
 						});
 					} else if (filteredMatches[0].similarity >= PERFECT_MATCH_THRESHOLD) {
+						console.log(`[JAMBONZ] DECISION: MATCHED - Perfect match with "${filteredMatches[0].name}" (score: ${filteredMatches[0].similarity.toFixed(4)})`);
 						participantMatches.push({
 							input_name: inputName,
 							status: 'matched',
@@ -583,6 +612,7 @@ async function handleProcessBooking(req: Request, res: Response) {
 							candidates: [],
 						});
 					} else {
+						console.log(`[JAMBONZ] DECISION: AMBIGUOUS - Best match "${filteredMatches[0].name}" (score: ${filteredMatches[0].similarity.toFixed(4)}) below perfect threshold`);
 						participantMatches.push({
 							input_name: inputName,
 							status: 'ambiguous',
@@ -600,6 +630,7 @@ async function handleProcessBooking(req: Request, res: Response) {
 					}
 				}
 			}
+			console.log('[JAMBONZ] === CONTACT MATCHING END ===');
 
 			const eventData = {
 				start: eventInfo.start,
